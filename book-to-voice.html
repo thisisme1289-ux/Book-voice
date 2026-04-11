@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0f0e0c"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="BookVoice"/>
+<title>BookVoice</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script>
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ─────── TOKENS ─────── */
+:root{
+  --bg:#0f0e0c; --surf:#181613; --panel:#211f1a; --border:#2f2c26;
+  --acc:#c9a84c; --acc2:#e8c96a; --text:#e8e4d9; --muted:#7a7568; --dim:#b0aa9e;
+  --active:rgba(201,168,76,.11); --r:10px;
+  --HDR:54px; --PL:78px; --SB:268px; --safe-b:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;}
+body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+     font-family:'DM Sans',sans-serif;font-size:14px;-webkit-tap-highlight-color:transparent;}
+
+/* ─────── VIEWS ─────── */
+/* Two root views: library and reader. One is visible at a time. */
+#library-screen{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;}
+#library-screen.hidden{display:none;}
+
+/* ─────── LIBRARY HEADER ─────── */
+#lib-hdr{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;padding:0 18px;
+  height:var(--HDR);flex-shrink:0;
+}
+#lib-logo{font-family:'Playfair Display',serif;font-size:1.15rem;color:var(--acc);flex:1;}
+.lhbtn{background:var(--panel);border:1px solid var(--border);color:var(--text);
+        padding:5px 13px;border-radius:var(--r);cursor:pointer;font-family:inherit;
+        font-size:.76rem;transition:all .15s;white-space:nowrap;}
+.lhbtn:hover{border-color:var(--acc);color:var(--acc);}
+#lib-install{display:none;background:var(--acc);border-color:var(--acc);color:#0f0e0c;font-weight:600;}
+#lib-install.show{display:block;}
+#lib-file{display:none;}
+
+/* ─────── LIBRARY BODY ─────── */
+#lib-body{flex:1;overflow-y:auto;padding:28px 20px 40px;max-width:900px;width:100%;margin:0 auto;}
+
+/* CONTINUE WIDGET */
+#hero{
+  background:linear-gradient(135deg,#1e1b15 0%,#252018 60%,#1a1813 100%);
+  border:1px solid var(--border);border-radius:16px;
+  padding:26px 28px;margin-bottom:36px;
+  display:flex;align-items:center;gap:24px;
+  cursor:pointer;transition:border-color .2s,box-shadow .2s;
+  position:relative;overflow:hidden;
+}
+#hero::before{
+  content:'';position:absolute;top:-40px;right:-40px;
+  width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(201,168,76,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+#hero:hover{border-color:rgba(201,168,76,.4);box-shadow:0 8px 40px rgba(0,0,0,.4);}
+#hero.hidden{display:none;}
+#hero-icon{font-size:3.2rem;flex-shrink:0;line-height:1;}
+#hero-body{flex:1;min-width:0;}
+#hero-label{font-family:'DM Mono',monospace;font-size:.58rem;color:var(--acc);
+             letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;}
+#hero-title{font-family:'Playfair Display',serif;font-size:1.35rem;font-weight:700;
+             color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#hero-meta{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);margin-bottom:12px;}
+#hero-bar-wrap{width:100%;height:3px;background:var(--border);border-radius:2px;margin-bottom:6px;}
+#hero-bar{height:3px;background:var(--acc);border-radius:2px;transition:width .3s;}
+#hero-pct{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--acc);}
+#hero-play{
+  flex-shrink:0;width:56px;height:56px;border-radius:50%;
+  background:var(--acc);border:none;color:#0f0e0c;font-size:1.3rem;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(201,168,76,.3);transition:all .15s;
+}
+#hero-play:hover{background:var(--acc2);transform:scale(1.06);}
+
+/* LIBRARY GRID */
+#lib-section-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+#lib-section-hdr span{font-family:'DM Mono',monospace;font-size:.6rem;
+  color:var(--muted);letter-spacing:.12em;text-transform:uppercase;}
+#lib-count{color:var(--muted);}
+
+#lib-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:14px;
+}
+
+/* Book card */
+.book-card{
+  background:var(--surf);border:1px solid var(--border);border-radius:12px;
+  padding:18px 16px 14px;cursor:pointer;transition:all .18s;
+  display:flex;flex-direction:column;gap:8px;position:relative;
+}
+.book-card:hover{border-color:rgba(201,168,76,.35);background:var(--panel);transform:translateY(-2px);}
+.bc-icon{font-size:2.2rem;line-height:1;margin-bottom:4px;}
+.bc-title{font-family:'Playfair Display',serif;font-size:.88rem;font-weight:700;
+           color:var(--text);line-height:1.3;
+           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.bc-meta{font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);}
+.bc-bar-wrap{width:100%;height:2px;background:var(--border);border-radius:2px;margin-top:2px;}
+.bc-bar{height:2px;background:var(--acc);border-radius:2px;}
+.bc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:4px;}
+.bc-pct{font-family:'DM Mono',monospace;font-size:.58rem;color:var(--acc);}
+.bc-del{
+  background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:.85rem;padding:2px 4px;border-radius:4px;transition:all .15s;line-height:1;
+}
+.bc-del:hover{color:#e05555;background:rgba(224,85,85,.1);}
+
+/* Empty state */
+#lib-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;text-align:center;padding:60px 24px;
+}
+#lib-empty.hidden{display:none;}
+.le-ring{width:80px;height:80px;border:2px dashed var(--border);border-radius:50%;
+          display:flex;align-items:center;justify-content:center;font-size:2rem;}
+.le-h{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--text);}
+.le-s{font-size:.78rem;color:var(--muted);max-width:280px;line-height:1.55;}
+.le-btn{background:var(--acc);color:#0f0e0c;border:none;padding:10px 26px;
+         border-radius:var(--r);cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem;}
+.le-btn:hover{background:var(--acc2);}
+
+/* Storage info bar */
+#storage-bar{
+  margin-top:28px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);
+  border-radius:8px;font-family:'DM Mono',monospace;font-size:.6rem;color:var(--muted);
+  display:flex;align-items:center;justify-content:space-between;
+}
+#storage-bar.hidden{display:none;}
+
+/* ─────── READER SHELL ─────── */
+#shell{
+  display:grid;
+  grid-template-areas:"hdr hdr" "sb rd" "pl pl";
+  grid-template-rows:var(--HDR) 1fr var(--PL);
+  grid-template-columns:var(--SB) 1fr;
+  height:100vh;height:100dvh;
+}
+
+/* READER HEADER */
+#hdr{grid-area:hdr;background:var(--surf);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:8px;padding:0 14px;}
+#logo{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--acc);flex-shrink:0;}
+#book-ttl{flex:1;font-size:.73rem;color:var(--muted);font-style:italic;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;padding:0 6px;}
+#sb-tog{display:none;background:none;border:none;color:var(--muted);font-size:1.25rem;
+         cursor:pointer;padding:4px 6px;flex-shrink:0;line-height:1;}
+.hbtn{flex-shrink:0;background:var(--panel);border:1px solid var(--border);color:var(--text);
+       padding:5px 12px;border-radius:var(--r);cursor:pointer;font-family:inherit;
+       font-size:.74rem;transition:all .15s;white-space:nowrap;}
+.hbtn:hover{border-color:var(--acc);color:var(--acc);}
+#back-btn{color:var(--acc);border-color:rgba(201,168,76,.3);}
+#install-btn{display:none;background:var(--acc);border-color:var(--acc);color:#0f0e0c;font-weight:600;}
+#install-btn.show{display:block;}
+#file-input{display:none;}
+
+/* SIDEBAR */
+#sb{grid-area:sb;background:var(--surf);border-right:1px solid var(--border);
+     display:flex;flex-direction:column;overflow:hidden;transition:transform .24s cubic-bezier(.4,0,.2,1);}
+#sb-hd{padding:11px 14px;font-size:.6rem;font-family:'DM Mono',monospace;color:var(--muted);
+        letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--border);flex-shrink:0;}
+#sb-stats{padding:7px 14px 5px;font-size:.6rem;color:var(--muted);font-family:'DM Mono',monospace;
+           border-bottom:1px solid var(--border);flex-shrink:0;}
+#ch-list{flex:1;overflow-y:auto;padding:4px 0;}
+.chi{padding:10px 14px;cursor:pointer;font-size:.78rem;color:var(--muted);
+      border-left:2px solid transparent;transition:all .14s;line-height:1.35;}
+.chi:hover{color:var(--text);background:var(--panel);}
+.chi.active{color:var(--acc);border-left-color:var(--acc);background:var(--active);}
+.chin{display:block;font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);margin-bottom:2px;}
+
+/* READER */
+#rd{grid-area:rd;overflow-y:auto;background:var(--bg);position:relative;-webkit-overflow-scrolling:touch;}
+#rd-inner{max-width:680px;margin:0 auto;padding:36px 24px 60px;}
+#loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
+#loading.hidden{display:none;}
+.spin{width:32px;height:32px;border:2.5px solid var(--border);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#ld-txt{font-size:.75rem;color:var(--muted);font-family:'DM Mono',monospace;}
+#ld-pct{font-size:1.4rem;color:var(--acc);font-family:'DM Mono',monospace;font-weight:700;}
+#book-cnt{display:none;}
+#book-cnt.vis{display:block;}
+#ch-title{font-family:'Playfair Display',serif;font-size:1.55rem;font-weight:700;line-height:1.2;margin-bottom:6px;}
+#ch-meta{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--muted);margin-bottom:26px;letter-spacing:.06em;text-transform:uppercase;}
+.para{font-size:.96rem;line-height:1.88;color:var(--dim);margin-bottom:1.25em;padding:7px 10px;
+      border-left:2px solid transparent;border-radius:4px;transition:all .2s;cursor:pointer;user-select:none;}
+.para:hover{background:var(--panel);color:var(--text);}
+.para.reading{background:var(--active);border-left-color:var(--acc);color:var(--text);}
+.para.done{color:var(--muted);border-left-color:transparent;}
+
+/* PLAYER */
+#pl{grid-area:pl;background:var(--surf);border-top:1px solid var(--border);
+     display:flex;flex-direction:column;padding-bottom:var(--safe-b);}
+#scrub-wrap{height:3px;background:var(--border);position:relative;cursor:pointer;flex-shrink:0;}
+#scrub-fill{height:100%;background:var(--acc);width:0%;transition:width .4s linear;pointer-events:none;}
+#pl-row{flex:1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 16px;gap:12px;min-width:0;}
+#pl-info{min-width:0;}
+#pl-now{font-family:'Playfair Display',serif;font-style:italic;font-size:.82rem;color:var(--text);
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#pl-det{font-family:'DM Mono',monospace;font-size:.57rem;color:var(--muted);margin-top:1px;}
+#pl-stat{font-family:'DM Mono',monospace;font-size:.55rem;color:var(--acc);height:8px;margin-top:2px;}
+#pl-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.cbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;cursor:pointer;
+       display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;
+       width:34px;height:34px;font-size:.78rem;}
+.cbtn:hover,.cbtn:active{border-color:var(--acc);color:var(--acc);}
+#play-btn{width:50px;height:50px;font-size:1.1rem;background:var(--acc);border-color:var(--acc);
+           color:#0f0e0c;box-shadow:0 4px 16px rgba(201,168,76,.25);}
+#play-btn:hover{background:var(--acc2);border-color:var(--acc2);transform:scale(1.04);}
+#play-btn:active{transform:scale(.97);}
+#pl-set{display:flex;align-items:center;justify-content:flex-end;gap:14px;min-width:0;}
+.sg{display:flex;flex-direction:column;gap:3px;}
+.sl{font-family:'DM Mono',monospace;font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;}
+#voice-sel{background:var(--panel);border:1px solid var(--border);color:var(--text);
+            padding:4px 8px;border-radius:8px;font-family:inherit;font-size:.72rem;
+            cursor:pointer;width:148px;outline:none;}
+#voice-sel:focus{border-color:var(--acc);}
+.spd-row{display:flex;align-items:center;gap:6px;}
+#speed-sl{-webkit-appearance:none;width:90px;height:3px;background:var(--border);border-radius:2px;outline:none;cursor:pointer;}
+#speed-sl::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--acc);cursor:pointer;}
+#spd-val{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--acc);min-width:28px;}
+
+/* OVERLAY */
+#overlay{display:none;position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
+#overlay.vis{display:block;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* DELETE CONFIRM */
+#del-confirm{
+  display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;
+}
+#del-confirm.show{display:flex;}
+#del-box{background:var(--surf);border:1px solid var(--border);border-radius:16px;
+          padding:28px 26px;max-width:340px;width:90%;text-align:center;}
+#del-box h3{font-family:'Playfair Display',serif;font-size:1.1rem;margin-bottom:8px;}
+#del-box p{font-size:.8rem;color:var(--muted);margin-bottom:22px;line-height:1.5;}
+.del-btns{display:flex;gap:10px;justify-content:center;}
+.del-btns button{padding:9px 24px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:500;}
+#del-cancel{background:var(--panel);border:1px solid var(--border);color:var(--text);}
+#del-cancel:hover{border-color:var(--acc);}
+#del-confirm-btn{background:#c0392b;border:1px solid #c0392b;color:#fff;}
+#del-confirm-btn:hover{background:#e74c3c;}
+
+/* ─────── RESPONSIVE ─────── */
+@media(max-width:900px){
+  #shell{grid-template-columns:0 1fr;}
+  #sb-tog{display:block;}
+  #sb{position:fixed;top:var(--HDR);left:0;bottom:var(--PL);width:280px;z-index:100;
+      transform:translateX(-102%);box-shadow:6px 0 32px rgba(0,0,0,.6);}
+  #sb.open{transform:translateX(0);}
+  #lib-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));}
+}
+@media(max-width:640px){
+  :root{--HDR:50px;--PL:148px;}
+  #pl-row{grid-template-columns:1fr auto;grid-template-rows:auto auto;padding:6px 14px 4px;gap:6px;}
+  #pl-set{grid-column:1/-1;justify-content:space-between;gap:10px;}
+  #voice-sel{width:130px;font-size:.68rem;}
+  #speed-sl{width:76px;}
+  #rd-inner{padding:20px 14px 56px;}
+  #ch-title{font-size:1.3rem;}
+  .para{font-size:.92rem;line-height:1.78;}
+  #play-btn{width:46px;height:46px;font-size:1rem;}
+  .cbtn{width:32px;height:32px;font-size:.72rem;}
+  #hero{flex-direction:column;align-items:flex-start;padding:20px 18px;}
+  #hero-play{position:absolute;top:18px;right:18px;width:48px;height:48px;font-size:1.1rem;}
+  #lib-body{padding:20px 14px 40px;}
+  #lib-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+}
+@media(max-width:400px){
+  :root{--PL:160px;}
+  #voice-sel{width:114px;font-size:.64rem;}
+  #speed-sl{width:64px;}
+  .cbtn{width:30px;height:30px;}
+  #play-btn{width:44px;height:44px;}
+  #lib-grid{grid-template-columns:1fr 1fr;gap:10px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LIBRARY SCREEN ═══════════════ -->
+<div id="library-screen">
+  <header id="lib-hdr">
+    <div id="lib-logo">BookVoice 📖</div>
+    <div id="credits-badge" style="font-family:'DM Mono',monospace;font-size:.62rem;color:#7a7568;display:none;flex-shrink:0;white-space:nowrap;"></div>
+    <button id="lib-install" class="lhbtn">⬇ Install</button>
+    <button class="lhbtn" id="lib-settings-btn" title="Settings">⚙️ Settings</button>
+    <button class="lhbtn" onclick="document.getElementById('lib-file').click()">+ Add Book</button>
+    <input type="file" id="lib-file" accept=".pdf"/>
+  </header>
+
+  <div id="lib-body">
+
+    <!-- CONTINUE READING WIDGET -->
+    <div id="hero" class="hidden" onclick="heroResume()">
+      <div id="hero-icon">📖</div>
+      <div id="hero-body">
+        <div id="hero-label">Continue Reading</div>
+        <div id="hero-title">—</div>
+        <div id="hero-meta">—</div>
+        <div id="hero-bar-wrap"><div id="hero-bar" style="width:0%"></div></div>
+        <div id="hero-pct">0%</div>
+      </div>
+      <button id="hero-play" onclick="event.stopPropagation();heroResume()">▶</button>
+    </div>
+
+    <!-- BOOK GRID -->
+    <div id="lib-section-hdr" style="display:none">
+      <span>Your Library</span>
+      <span id="lib-count"></span>
+    </div>
+    <div id="lib-grid"></div>
+
+    <!-- EMPTY STATE -->
+    <div id="lib-empty">
+      <div class="le-ring">📚</div>
+      <div class="le-h">No books yet</div>
+      <div class="le-s">Add a PDF and it will be saved here. Come back and pick up right where you left off.</div>
+      <button class="le-btn" onclick="document.getElementById('lib-file').click()">Add your first book</button>
+    </div>
+
+    <!-- STORAGE INFO -->
+    <div id="storage-bar" class="hidden">
+      <span id="storage-txt">—</span>
+      <span style="color:var(--muted)">Stored locally in your browser</span>
+    </div>
+
+    <!-- WIDGET INFO -->
+    <div id="widget-info" style="margin-top:20px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:var(--acc);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;">📱 Widgets &amp; Controls</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:4px;">🔒 Lock Screen Widget</div>
+          <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">While playing, your phone's lock screen &amp; notification bar shows the book title with ⏮ ▶ ⏭ controls. Works on Android &amp; desktop Chrome automatically.</div>
+        </div>
+        <div style="background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:4px;">📲 Home Screen App</div>
+          <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">Use the ⬇ Install button to add BookVoice to your home screen as a full app — no app store needed. On iPhone: Safari → Share → Add to Home Screen.</div>
+        </div>
+        <div style="background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:4px;">⚠️ Home Screen Widgets</div>
+          <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">Android/iOS home screen widgets (the kind you long-press to add) require a native app from the App Store. Web apps like this cannot create those.</div>
+        </div>
+        <div style="background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:4px;">💾 Your Books Stay Saved</div>
+          <div style="font-size:.72rem;color:var(--muted);line-height:1.5;">All PDFs and positions are saved in your browser's storage. Close the tab, reopen — everything is right here. Delete books anytime from the library.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div id="del-confirm">
+  <div id="del-box">
+    <h3>Delete book?</h3>
+    <p id="del-name" style="color:var(--acc);font-family:'Playfair Display',serif;font-size:1rem;margin-bottom:8px;"></p>
+    <p>This will remove the book and your reading position. This cannot be undone.</p>
+    <div class="del-btns">
+      <button id="del-cancel" onclick="closeDel()">Cancel</button>
+      <button id="del-confirm-btn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ READER SHELL ═══════════════ -->
+<div id="shell">
+  <header id="hdr">
+    <button id="sb-tog">☰</button>
+    <div id="logo">BookVoice</div>
+    <div id="book-ttl">—</div>
+    <button id="back-btn" class="hbtn" onclick="goLibrary()">← Library</button>
+    <button class="hbtn" id="rd-settings-btn" title="Settings">⚙️</button>
+    <button id="install-btn" class="hbtn">⬇ Install</button>
+    <input type="file" id="file-input" accept=".pdf"/>
+  </header>
+
+  <aside id="sb">
+    <div id="sb-hd">Chapters</div>
+    <div id="sb-stats"></div>
+    <div id="ch-list"></div>
+  </aside>
+  <div id="overlay"></div>
+
+  <main id="rd">
+    <div id="loading" class="hidden">
+      <div class="spin"></div>
+      <div id="ld-txt">Reading PDF…</div>
+      <div id="ld-pct">0%</div>
+      <!-- OCR progress (shown only for scanned pages) -->
+      <div id="ocr-wrap" style="display:none;margin-top:14px;width:260px;max-width:80vw;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span id="ocr-badge" style="font-family:'DM Mono',monospace;font-size:.6rem;color:#c9a84c;letter-spacing:.1em;">🔍 OCR MODE</span>
+          <span id="ocr-conf" style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;"></span>
+        </div>
+        <div style="width:100%;height:3px;background:#2f2c26;border-radius:2px;">
+          <div id="ocr-bar" style="height:3px;background:#c9a84c;border-radius:2px;width:0%;transition:width .2s;"></div>
+        </div>
+        <div id="ocr-detail" style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;margin-top:5px;text-align:center;"></div>
+      </div>
+    </div>
+    <div id="rd-inner">
+      <div id="book-cnt">
+        <div id="ch-title"></div>
+        <div id="ch-meta"></div>
+        <div id="paragraphs"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="pl">
+    <div id="scrub-wrap"><div id="scrub-fill"></div></div>
+    <div id="pl-row">
+      <div id="pl-info">
+        <div id="pl-now">Not playing</div>
+        <div id="pl-det">—</div>
+        <div id="pl-stat"></div>
+      </div>
+      <div id="pl-ctrl">
+        <button class="cbtn" id="ch-prev" title="Prev chapter">⏫</button>
+        <button class="cbtn" id="p-prev"  title="Prev paragraph">⏮</button>
+        <button class="cbtn" id="play-btn">▶</button>
+        <button class="cbtn" id="p-next"  title="Next paragraph">⏭</button>
+        <button class="cbtn" id="ch-next" title="Next chapter">⏬</button>
+      </div>
+      <div id="pl-set">
+        <div class="sg">
+          <span class="sl">Voice</span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="voice-sel">
+              <optgroup label="🇬🇧 British">
+                <option value="UK English Female">British Female</option>
+                <option value="UK English Male">British Male</option>
+              </optgroup>
+              <optgroup label="🇺🇸 American">
+                <option value="US English Female">American Female</option>
+                <option value="US English Male">American Male</option>
+              </optgroup>
+              <optgroup label="🇦🇺 Australian">
+                <option value="Australian Female">Australian Female</option>
+              </optgroup>
+              <optgroup label="🇮🇳 Indian">
+                <option value="Indian English Female">Indian Female</option>
+              </optgroup>
+            </select>
+            <button id="test-voice-btn" title="Test this voice" style="background:var(--panel);border:1px solid var(--border);color:var(--acc);border-radius:6px;cursor:pointer;padding:4px 8px;font-size:.72rem;white-space:nowrap;flex-shrink:0;font-family:inherit;">🔊 Test</button>
+          </div>
+        </div>
+        <div class="sg">
+          <span class="sl">Speed</span>
+          <div class="spd-row">
+            <input type="range" id="speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"/>
+            <span id="spd-val">0.9×</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ═══ INDEXEDDB ═══════════════════════════════════════════════════════════ */
+const DB = (() => {
+  let db = null;
+  const open = () => new Promise((res, rej) => {
+    const r = indexedDB.open('BookVoiceDB', 2);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('books'))     d.createObjectStore('books',     { keyPath:'name' });
+      if (!d.objectStoreNames.contains('positions')) d.createObjectStore('positions', { keyPath:'name' });
+    };
+    r.onsuccess = e => { db = e.target.result; res(); };
+    r.onerror   = () => rej(r.error);
+  });
+  const tx  = (s, m) => db.transaction(s, m).objectStore(s);
+  const put  = (s, v) => new Promise((res, rej) => { const r = tx(s,'readwrite').put(v); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const get  = (s, k) => new Promise((res, rej) => { const r = tx(s,'readonly').get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const all  = (s)    => new Promise((res, rej) => { const r = tx(s,'readonly').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const del  = (s, k) => new Promise((res, rej) => { const r = tx(s,'readwrite').delete(k); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  return {
+    init:           ()        => open(),
+    saveBook:       (name, data, meta) => put('books', { name, data, meta, savedAt: Date.now() }),
+    getBook:        (name)    => get('books', name),
+    getAllBooks:     ()        => all('books'),
+    deleteBook:     (name)    => Promise.all([del('books', name), del('positions', name)]),
+    savePos:        (name, p) => put('positions', { name, ...p, savedAt: Date.now() }),
+    getPos:         (name)    => get('positions', name),
+  };
+})();
+
+/* ═══ STATE ═══════════════════════════════════════════════════════════════ */
+let chapters = [], allParas = [], curCh = 0, curPara = 0;
+let isPlaying = false, bookName = '';
+let _sentences = [], _sIdx = 0, _paraIdx = 0;
+let pendingAutoPlay = false;
+let bookToDelete = null;
+
+/* ═══ PWA ═════════════════════════════════════════════════════════════════ */
+(function() {
+  const m = { name:'BookVoice',short_name:'BookVoice',display:'standalone',
+    start_url:'.', background_color:'#0f0e0c', theme_color:'#0f0e0c',
+    icons:[{src:ico(192),sizes:'192x192',type:'image/png'},{src:ico(512),sizes:'512x512',type:'image/png'}] };
+  function ico(s) {
+    const c = document.createElement('canvas'); c.width=c.height=s;
+    const x = c.getContext('2d'); x.fillStyle='#181613'; x.fillRect(0,0,s,s);
+    x.font=`${s*.55}px serif`; x.textAlign='center'; x.textBaseline='middle';
+    x.fillText('📖', s/2, s/2); return c.toDataURL();
+  }
+  const blob = new Blob([JSON.stringify(m)], { type:'application/json' });
+  const l = document.createElement('link'); l.rel='manifest'; l.href=URL.createObjectURL(blob);
+  document.head.appendChild(l);
+})();
+
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById('install-btn').classList.add('show');
+  document.getElementById('lib-install').classList.add('show');
+});
+const installHandler = async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('install-btn').classList.remove('show');
+    document.getElementById('lib-install').classList.remove('show');
+  }
+  deferredPrompt = null;
+};
+document.getElementById('install-btn').onclick = installHandler;
+document.getElementById('lib-install').onclick  = installHandler;
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-btn').classList.remove('show');
+  document.getElementById('lib-install').classList.remove('show');
+});
+
+/* ═══ LIBRARY ═════════════════════════════════════════════════════════════ */
+async function showLibrary() {
+  stopSpeech();
+  document.getElementById('library-screen').classList.remove('hidden');
+
+  const books = await DB.getAllBooks();
+  books.sort((a, b) => b.savedAt - a.savedAt);
+
+  const grid  = document.getElementById('lib-grid');
+  const empty = document.getElementById('lib-empty');
+  const secHdr = document.getElementById('lib-section-hdr');
+  const storBar = document.getElementById('storage-bar');
+  grid.innerHTML = '';
+
+  if (!books.length) {
+    empty.classList.remove('hidden');
+    document.getElementById('hero').classList.add('hidden');
+    secHdr.style.display = 'none';
+    storBar.classList.add('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  secHdr.style.display = 'flex';
+  document.getElementById('lib-count').textContent = books.length + ' book' + (books.length > 1 ? 's' : '');
+
+  // Populate hero widget with most recent
+  const latest = books[0];
+  const latestPos = await DB.getPos(latest.name);
+  populateHero(latest, latestPos);
+
+  // Storage estimate
+  try {
+    const est = await navigator.storage.estimate();
+    const usedMB = (est.usage / 1024 / 1024).toFixed(1);
+    const quotaMB = (est.quota / 1024 / 1024).toFixed(0);
+    document.getElementById('storage-txt').textContent = `${usedMB} MB used of ~${quotaMB} MB available`;
+    storBar.classList.remove('hidden');
+  } catch {}
+
+  // Book cards
+  for (const book of books) {
+    const pos = await DB.getPos(book.name);
+    const pct = pos && book.meta ? Math.round((pos.para / book.meta.totalParas) * 100) : 0;
+    const chInfo = pos ? `Ch ${pos.ch + 1}` : 'Not started';
+
+    const card = document.createElement('div');
+    card.className = 'book-card';
+    card.innerHTML = `
+      <div class="bc-icon">📖</div>
+      <div class="bc-title">${esc(book.name)}</div>
+      <div class="bc-meta">${book.meta ? book.meta.totalChapters + ' chapters' : ''} · p.${pos ? pos.page || '—' : '—'}</div>
+      <div class="bc-bar-wrap"><div class="bc-bar" style="width:${pct}%"></div></div>
+      <div class="bc-foot">
+        <span class="bc-pct">${pct > 0 ? chInfo + ' · ' + pct + '%' : 'Not started'}</span>
+        <button class="bc-del" title="Delete book" data-name="${esc(book.name)}">🗑</button>
+      </div>`;
+    card.onclick = e => {
+      if (e.target.classList.contains('bc-del')) return;
+      openBook(book.name, false);
+    };
+    card.querySelector('.bc-del').onclick = e => {
+      e.stopPropagation(); askDelete(book.name);
+    };
+    grid.appendChild(card);
+  }
+}
+
+function populateHero(book, pos) {
+  const hero = document.getElementById('hero');
+  const pct  = pos && book.meta ? Math.round((pos.para / book.meta.totalParas) * 100) : 0;
+  document.getElementById('hero-title').textContent = book.name;
+  document.getElementById('hero-meta').textContent  =
+    pos ? `Chapter ${pos.ch + 1}  ·  Page ${pos.page || '—'}` : 'Not started yet';
+  document.getElementById('hero-bar').style.width = pct + '%';
+  document.getElementById('hero-pct').textContent  = pct + '% complete';
+  hero.classList.remove('hidden');
+  hero.dataset.book = book.name;
+}
+
+async function heroResume() {
+  const name = document.getElementById('hero').dataset.book;
+  if (!name) return;
+  openBook(name, true);  // auto-play
+}
+
+async function openBook(name, autoPlay) {
+  pendingAutoPlay = autoPlay;
+  document.getElementById('library-screen').classList.add('hidden');
+  document.getElementById('loading').classList.remove('hidden');
+
+  const record = await DB.getBook(name);
+  if (!record) { showLibrary(); return; }
+
+  await parsePDF(record.data, name, false);
+}
+
+function goLibrary() {
+  stopSpeech();
+  saveCurrentPos();
+  showLibrary();
+}
+
+/* ═══ FILE INPUT ══════════════════════════════════════════════════════════ */
+function isPDF(f) {
+  // Some mobile browsers return empty MIME type — fall back to extension check
+  return f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+}
+
+function bindFileInputs() {
+  const handler = async (e) => {
+    const f = e.target.files[0];
+    e.target.value = ''; // reset so same file can be re-picked
+    if (!isPDF(f)) {
+      alert('Please choose a PDF file.');
+      return;
+    }
+    await handleFileLoad(f);
+  };
+  document.getElementById('lib-file').addEventListener('change', handler);
+  document.getElementById('file-input').addEventListener('change', handler);
+}
+
+async function handleFileLoad(f) {
+  try {
+    document.getElementById('library-screen').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('ld-txt').textContent = 'Reading file…';
+    document.getElementById('ld-pct').textContent = '';
+    const data = await f.arrayBuffer();
+    const name = f.name.replace(/\.pdf$/i, '');
+    await parsePDF(data, name, true);
+  } catch (err) {
+    console.error('File load error:', err);
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('library-screen').classList.remove('hidden');
+    alert('Could not read this PDF. Make sure it is a valid, text-based PDF (not a scanned image).\n\nError: ' + (err.message || err));
+  }
+}
+
+document.body.addEventListener('dragover',  e => e.preventDefault());
+document.body.addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!isPDF(f)) { alert('Please drop a PDF file.'); return; }
+  await handleFileLoad(f);
+});
+
+/* ═══ PDF EXTRACTION — Hybrid: native text + Tesseract OCR for images ══════ */
+
+// Minimum characters from PDF.js text extraction to consider a page "digital"
+// Anything below this triggers OCR
+const MIN_TEXT_CHARS = 80;
+
+// Shared Tesseract worker (created once, reused across all pages)
+let _tesseractWorker = null;
+
+async function getTesseractWorker() {
+  if (_tesseractWorker) return _tesseractWorker;
+  _tesseractWorker = await Tesseract.createWorker('eng', 1, {
+    // Use CDN for language data so no download needed by the app
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+    logger:   m => {
+      if (m.status === 'recognizing text') {
+        const pct = Math.round((m.progress || 0) * 100);
+        const bar = document.getElementById('ocr-bar');
+        const det = document.getElementById('ocr-detail');
+        if (bar) bar.style.width = pct + '%';
+        if (det) det.textContent = `Recognising… ${pct}%`;
+      }
+    },
+  });
+  return _tesseractWorker;
+}
+
+// Render a PDF page to a canvas at given scale for OCR
+async function renderPageToCanvas(page, scale = 2.5) {
+  const vp     = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.floor(vp.width);
+  canvas.height = Math.floor(vp.height);
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
+// Extract text from a single page — tries native first, falls back to OCR
+async function extractPageText(page, pageNum, totalPages, isOCRMode) {
+  // ── Step 1: native PDF.js text extraction ──────────────────────────────
+  const content   = await page.getTextContent();
+  const items      = content.items.filter(it => it.str && it.str.trim());
+  const nativeText = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+
+  if (nativeText.length >= MIN_TEXT_CHARS) {
+    // Good digital text — process normally
+    return { lines: buildNativeLines(items), mode: 'native' };
+  }
+
+  // ── Step 2: OCR via Tesseract.js ──────────────────────────────────────
+  // Show OCR UI
+  const ocrWrap = document.getElementById('ocr-wrap');
+  if (ocrWrap) ocrWrap.style.display = 'block';
+  document.getElementById('ld-txt').textContent =
+    `OCR scanning page ${pageNum} of ${totalPages}…`;
+  document.getElementById('ocr-detail').textContent = 'Rendering page…';
+  document.getElementById('ocr-bar').style.width = '0%';
+
+  const canvas = await renderPageToCanvas(page, 2.5);
+  const worker = await getTesseractWorker();
+
+  const { data } = await worker.recognize(canvas);
+
+  const conf = data.confidence ? Math.round(data.confidence) : '?';
+  const confEl = document.getElementById('ocr-conf');
+  if (confEl) confEl.textContent = `Confidence: ${conf}%`;
+
+  // Convert Tesseract paragraphs/lines → our format
+  const ocrLines = [];
+  if (data.blocks) {
+    for (const block of data.blocks) {
+      for (const para of (block.paragraphs || [])) {
+        const paraText = (para.lines || [])
+          .map(l => (l.words || []).map(w => w.text).join(' '))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (paraText.length > 10) ocrLines.push(paraText);
+      }
+    }
+  }
+  if (!ocrLines.length && data.text) {
+    // Fallback: use raw text split by newlines
+    data.text.split('\n').forEach(l => {
+      l = l.trim();
+      if (l.length > 10) ocrLines.push(l);
+    });
+  }
+
+  return { lines: ocrLines, mode: 'ocr', confidence: conf };
+}
+
+// Build structured lines from native PDF.js items
+function buildNativeLines(items) {
+  // group by y, sort left→right within lines
+  const lineMap = {};
+  for (const it of items) {
+    const y = Math.round(it.transform[5]);
+    if (!lineMap[y]) lineMap[y] = { refY: y, items: [], h: 0, w: 0 };
+    lineMap[y].items.push({
+      str: it.str, x: it.transform[4],
+      w: Math.abs(it.width)||0, h: Math.abs(it.height)||10
+    });
+    lineMap[y].h = Math.max(lineMap[y].h, Math.abs(it.height)||10);
+  }
+
+  const lines = Object.values(lineMap).sort((a, b) => b.refY - a.refY);
+
+  return lines.map(ln => {
+    ln.items.sort((a, b) => a.x - b.x);
+    let t = '';
+    for (let i = 0; i < ln.items.length; i++) {
+      if (i > 0) {
+        const gap = ln.items[i].x - (ln.items[i-1].x + ln.items[i-1].w);
+        t += (gap > 3 ? ' ' : '') + ln.items[i].str;
+      } else t = ln.items[i].str;
+    }
+    return { text: t.replace(/\s+/g, ' ').trim(), refY: ln.refY, h: ln.h };
+  }).filter(ln => ln.text.length > 0);
+}
+
+// Convert native lines → paragraph strings using gap detection
+function nativeLinesToParas(lines, page) {
+  if (!lines.length) return [];
+  const hs   = lines.map(l => l.h).filter(h => h > 2).sort((a,b) => a-b);
+  const medH = hs[Math.floor(hs.length/2)] || 12;
+  const GAP  = medH * 1.4;
+
+  const valid = lines.filter(ln =>
+    ln.text.length > 1 &&
+    !/^\d{1,4}$/.test(ln.text.trim()) &&
+    !/^[-–—]{2,}$/.test(ln.text.trim())
+  );
+
+  const paras = [];
+  let buf = [];
+  for (let i = 0; i < valid.length; i++) {
+    buf.push(valid[i].text);
+    const gap = valid[i+1] ? valid[i].refY - valid[i+1].refY : GAP + 1;
+    if (gap > GAP || i === valid.length - 1) {
+      const joined = buf.join(' ').replace(/\s+/g, ' ').trim();
+      if (joined.length > 10) paras.push({ text: joined, page });
+      buf = [];
+    }
+  }
+  return paras;
+}
+
+async function parsePDF(data, name, saveToDB) {
+  stopSpeech();
+  bookName = name;
+  document.getElementById('book-ttl').textContent  = name;
+  document.getElementById('book-cnt').classList.remove('vis');
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('ocr-wrap').style.display = 'none';
+
+  try {
+    const pdf   = await pdfjsLib.getDocument({ data: data instanceof ArrayBuffer ? data.slice(0) : data }).promise;
+    const total = pdf.numPages;
+    const rawParas = [];
+    let ocrPageCount = 0;
+
+    for (let p = 1; p <= total; p++) {
+      document.getElementById('ld-txt').textContent = `Extracting page ${p} of ${total}`;
+      document.getElementById('ld-pct').textContent  = Math.round(p / total * 100) + '%';
+
+      const page   = await pdf.getPage(p);
+      const result = await extractPageText(page, p, total);
+
+      if (result.mode === 'ocr') {
+        ocrPageCount++;
+        // OCR returns flat line strings, each becomes its own paragraph
+        for (const line of result.lines) {
+          if (line.length > 10) rawParas.push({ text: line, page: p });
+        }
+      } else {
+        // Native: convert structured lines → paragraphs
+        const paras = nativeLinesToParas(result.lines, p);
+        rawParas.push(...paras);
+      }
+    }
+
+    // Hide OCR progress after all pages done
+    document.getElementById('ocr-wrap').style.display = 'none';
+
+    // ── Build chapters + allParas ──────────────────────────────────────
+    allParas = []; chapters = [];
+    for (const { text, page } of rawParas) {
+      if (isHeading(text)) {
+        chapters.push({ title: text, start: allParas.length, page });
+        allParas.push({ text, page, heading: true });
+      } else {
+        allParas.push({ text, page });
+      }
+    }
+    for (let i = 0; i < chapters.length; i++)
+      chapters[i].end = i+1 < chapters.length ? chapters[i+1].start : allParas.length;
+    if (!chapters.length)
+      chapters = [{ title: name, start: 0, end: allParas.length, page: 1 }];
+
+    // ── Save ──────────────────────────────────────────────────────────
+    if (saveToDB) {
+      await DB.saveBook(name, data instanceof ArrayBuffer ? data : data.buffer, {
+        totalChapters: chapters.length,
+        totalParas:    allParas.length,
+        hadOCR:        ocrPageCount > 0,
+      });
+    }
+
+    document.getElementById('loading').classList.add('hidden');
+    buildSidebar();
+    loadChapter(0);
+
+    // Restore saved position
+    const saved = await DB.getPos(name);
+    if (saved) { loadChapter(saved.ch); jumpTo(saved.para); }
+
+    if (pendingAutoPlay) { pendingAutoPlay = false; startReading(); }
+
+    // Show OCR notice if we used it
+    if (ocrPageCount > 0) {
+      setTimeout(() => {
+        const notice = document.createElement('div');
+        notice.style.cssText = 'position:fixed;bottom:calc(var(--PL) + 12px);left:50%;transform:translateX(-50%);background:#211f1a;border:1px solid #c9a84c;color:#e8e4d9;padding:10px 18px;border-radius:10px;font-family:\'DM Mono\',monospace;font-size:.68rem;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:90vw;text-align:center;';
+        notice.textContent = `🔍 ${ocrPageCount} scanned page${ocrPageCount>1?'s':''} processed with OCR — accuracy depends on scan quality`;
+        document.body.appendChild(notice);
+        setTimeout(() => notice.remove(), 5000);
+      }, 500);
+    }
+
+  } catch(err) {
+    console.error('PDF parse error:', err);
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('ocr-wrap').style.display = 'none';
+    document.getElementById('library-screen').classList.remove('hidden');
+    alert('Failed to extract text from this PDF.\n\nError: ' + (err.message || err));
+  }
+}
+
+function isHeading(text) {
+  if (text.length > 100) return false;
+  if (/^chapter\s+[\d\w]+/i.test(text))    return true;
+  if (/^part\s+[\divxlIVXL]+/i.test(text)) return true;
+  if (/^(introduction|preface|foreword|prologue|epilogue|conclusion|appendix|bibliography)/i.test(text)) return true;
+  if (/^\d{1,2}\.\s+[A-Z]/.test(text) && text.length < 70) return true;
+  const s = text.replace(/[^A-Za-z]/g, '');
+  if (s.length > 3 && s === s.toUpperCase() && text.length < 55) return true;
+  return false;
+}
+
+/* ═══ SIDEBAR ═════════════════════════════════════════════════════════════ */
+const sbEl=document.getElementById('sb');
+const ovEl=document.getElementById('overlay');
+document.getElementById('sb-tog').onclick=()=>{ sbEl.classList.toggle('open'); ovEl.classList.toggle('vis'); };
+ovEl.onclick=closeSB;
+function closeSB(){ sbEl.classList.remove('open'); ovEl.classList.remove('vis'); }
+
+function buildSidebar() {
+  const list=document.getElementById('ch-list');
+  list.innerHTML='';
+  document.getElementById('sb-stats').textContent=`${chapters.length} chapters · ${allParas.length} paragraphs`;
+  chapters.forEach((ch,i)=>{
+    const d=document.createElement('div');
+    d.className='chi';
+    d.innerHTML=`<span class="chin">Ch ${i+1} · p.${ch.page}</span>${ch.title}`;
+    d.onclick=()=>{ stopSpeech(); loadChapter(i); closeSB(); };
+    list.appendChild(d);
+  });
+}
+function activateSB(i){
+  document.querySelectorAll('.chi').forEach((el,idx)=>el.classList.toggle('active',idx===i));
+  document.querySelectorAll('.chi')[i]?.scrollIntoView({block:'nearest'});
+}
+
+/* ═══ CHAPTER ═════════════════════════════════════════════════════════════ */
+function loadChapter(i) {
+  curCh=i;
+  const ch=chapters[i];
+  activateSB(i);
+  document.getElementById('ch-title').textContent=ch.title;
+  document.getElementById('ch-meta').textContent=
+    `Chapter ${i+1} of ${chapters.length}  ·  Page ${ch.page}  ·  ${ch.end-ch.start} paragraphs`;
+  const box=document.getElementById('paragraphs');
+  box.innerHTML='';
+  for (let p=ch.start;p<ch.end;p++) {
+    if (allParas[p].heading) continue;
+    const d=document.createElement('div');
+    d.className='para'; d.dataset.idx=p; d.textContent=allParas[p].text;
+    d.onclick=()=>{ jumpTo(p); if(!isPlaying) startReading(); };
+    box.appendChild(d);
+  }
+  document.getElementById('book-cnt').classList.add('vis');
+  document.getElementById('rd').scrollTop=0;
+  curPara=ch.start;
+  updateProgress();
+}
+
+/* ═══ CONFIG ══════════════════════════════════════════════════════════════ */
+const SERVER = 'http://localhost:3000'; // ← change to your deployed URL
+
+async function getUserId() {
+  const saved = await DB.getPos('__userid__');
+  if (saved && saved.uid) return saved.uid;
+  const uid = 'bv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+  await DB.savePos('__userid__', { name:'__userid__', uid });
+  return uid;
+}
+
+/* ═══ SETTINGS STATE ══════════════════════════════════════════════════════ */
+let CFG = {
+  plan:         'free',      // 'free' | 'ownkey' | 'pay'
+  freeVoice:    'UK English Female',
+  freeSpeed:    0.9,
+  ownkeyKey:    '',
+  ownkeySecret: '',
+  ownkeyRegion: 'ap-south-1',
+  ownkeyVoice:  'Amy|neural',
+  ownkeySpeed:  0.9,
+  pollyVoice:   'Amy|neural',
+  pollySpeed:   0.9,
+};
+let USER_ID     = '';
+let userCredits = { freeRemaining:50000, paidCredits:0, freeMonthly:50000 };
+
+async function loadSettings() {
+  try { const s = await DB.getPos('__settings__'); if (s) Object.assign(CFG, s); } catch {}
+}
+async function persistSettings() {
+  await DB.savePos('__settings__', { ...CFG, name:'__settings__' });
+}
+
+async function fetchCredits() {
+  try {
+    const r = await fetch(`${SERVER}/api/credits?userId=${USER_ID}`);
+    if (r.ok) { userCredits = await r.json(); updateCreditsBadge(); }
+  } catch {}
+}
+
+function updateCreditsBadge() {
+  const badge = document.getElementById('credits-badge');
+  if (!badge) return;
+  if (CFG.plan === 'free') {
+    badge.textContent = `Free: ${Math.round(userCredits.freeRemaining/1000)}K chars left`;
+    badge.style.color = userCredits.freeRemaining < 10000 ? '#e8a84c' : '#7a7568';
+  } else if (CFG.plan === 'ownkey') {
+    badge.textContent = '🔑 Own AWS Keys';
+    badge.style.color = '#c9a84c';
+  } else {
+    badge.textContent = `Credits: ${Math.round(userCredits.paidCredits/1000)}K chars`;
+    badge.style.color = userCredits.paidCredits < 10000 ? '#e8a84c' : '#c9a84c';
+  }
+  badge.style.display = 'block';
+}
+
+/* ═══ SETTINGS MODAL ══════════════════════════════════════════════════════ */
+let _activePlan = 'free';
+
+function openSettings() {
+  // Populate from CFG
+  document.getElementById('free-voice-sel').value  = CFG.freeVoice;
+  document.getElementById('free-speed-sl').value   = CFG.freeSpeed;
+  document.getElementById('free-spd-lbl').textContent = CFG.freeSpeed.toFixed(1)+'×';
+  document.getElementById('ownkey-key').value       = CFG.ownkeyKey;
+  document.getElementById('ownkey-secret').value    = CFG.ownkeySecret;
+  document.getElementById('ownkey-region').value    = CFG.ownkeyRegion;
+  document.getElementById('ownkey-voice').value     = CFG.ownkeyVoice;
+  document.getElementById('ownkey-speed-sl').value  = CFG.ownkeySpeed;
+  document.getElementById('ownkey-spd-lbl').textContent = CFG.ownkeySpeed.toFixed(1)+'×';
+  document.getElementById('polly-voice-sel').value  = CFG.pollyVoice;
+  document.getElementById('polly-speed-sl').value   = CFG.pollySpeed;
+  document.getElementById('polly-spd-lbl').textContent = CFG.pollySpeed.toFixed(1)+'×';
+  selectPlan(CFG.plan);
+  updateCreditsDisplay();
+  loadPackButtons();
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+  document.getElementById('ownkey-status').textContent = '';
+}
+async function saveSettings() {
+  CFG.plan         = _activePlan;
+  CFG.freeVoice    = document.getElementById('free-voice-sel').value;
+  CFG.freeSpeed    = parseFloat(document.getElementById('free-speed-sl').value);
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  CFG.ownkeySpeed  = parseFloat(document.getElementById('ownkey-speed-sl').value);
+  CFG.pollyVoice   = document.getElementById('polly-voice-sel').value;
+  CFG.pollySpeed   = parseFloat(document.getElementById('polly-speed-sl').value);
+  await persistSettings();
+  updateCreditsBadge();
+  closeSettings();
+}
+
+function selectPlan(plan) {
+  _activePlan = plan;
+  const plans = ['free','ownkey','pay'];
+  plans.forEach(p => {
+    const isActive = p === plan;
+    document.getElementById(`pc-${p}`).style.border = isActive ? '2px solid #c9a84c' : '1px solid #2f2c26';
+    document.getElementById(`panel-${p}`).style.display = isActive ? 'block' : 'none';
+  });
+  document.getElementById('pb-free').textContent   = plan==='free'   ? '✓ ACTIVE' : '';
+  document.getElementById('pb-ownkey').textContent = plan==='ownkey' ? '✓ ACTIVE' : 'ENTER KEYS';
+  document.getElementById('pb-pay').textContent    = plan==='pay'    ? '✓ ACTIVE' : 'BUY CREDITS';
+  document.getElementById('pb-free').style.color   = plan==='free'   ? '#c9a84c' : '#7a7568';
+  document.getElementById('pb-ownkey').style.color = plan==='ownkey' ? '#c9a84c' : '#7a7568';
+  document.getElementById('pb-pay').style.color    = plan==='pay'    ? '#c9a84c' : '#7a7568';
+}
+
+function updateCreditsDisplay() {
+  const fLeft  = userCredits.freeRemaining || 0;
+  const fTotal = userCredits.freeMonthly   || 50000;
+  document.getElementById('free-used-display').textContent =
+    `${fLeft.toLocaleString()} / ${fTotal.toLocaleString()} chars remaining`;
+  document.getElementById('free-quota-bar').style.width = (fLeft/fTotal*100)+'%';
+  const paid = userCredits.paidCredits || 0;
+  document.getElementById('paid-credits-display').textContent = paid.toLocaleString();
+  document.getElementById('paid-pages-display').textContent   = Math.floor(paid/1500);
+}
+
+async function loadPackButtons() {
+  const box = document.getElementById('packs-container');
+  box.innerHTML = '<div style="font-size:.7rem;color:#7a7568;">Loading…</div>';
+  try {
+    const r = await fetch(`${SERVER}/api/packs`);
+    const packs = await r.json();
+    box.innerHTML = '';
+    packs.forEach(pack => {
+      const priceINR = (pack.amount/100).toLocaleString('en-IN');
+      const btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:10px 14px;border-radius:9px;cursor:pointer;font-family:inherit;font-size:.75rem;width:100%;text-align:left;transition:border-color .15s;';
+      btn.innerHTML = `<span><b style="color:#c9a84c">${pack.credits.toLocaleString()}</b> chars <span style="color:#7a7568">≈ ${pack.pages} pages</span></span><span style="background:#c9a84c;color:#0f0e0c;padding:4px 12px;border-radius:6px;font-weight:700;">₹${priceINR}</span>`;
+      btn.onmouseover = () => btn.style.borderColor='#c9a84c';
+      btn.onmouseout  = () => btn.style.borderColor='#2f2c26';
+      btn.onclick     = () => buyCredits(pack.id, pack.amount, pack.label, pack.credits);
+      box.appendChild(btn);
+    });
+  } catch {
+    box.innerHTML = '<div style="font-size:.7rem;color:#e05555;">Server not reachable — is it running?</div>';
+  }
+}
+
+async function buyCredits(packId, amount, label, credits) {
+  const statusEl = document.getElementById('payment-status');
+  statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Creating order…';
+  try {
+    const r   = await fetch(`${SERVER}/api/create-order`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ pack:packId, userId:USER_ID })
+    });
+    const ord = await r.json();
+    if (!r.ok) throw new Error(ord.error);
+    const rzp = new Razorpay({
+      key: ord.key, amount: ord.amount, currency: ord.currency,
+      name:'BookVoice Premium', description:label, order_id: ord.orderId,
+      theme:{ color:'#c9a84c' },
+      handler: async resp => {
+        statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Verifying…';
+        const vr = await fetch(`${SERVER}/api/verify-payment`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ...resp, userId:USER_ID, pack:packId })
+        });
+        const vd = await vr.json();
+        if (vd.success) {
+          await fetchCredits(); updateCreditsDisplay();
+          statusEl.style.color='#4caf7a';
+          statusEl.textContent=`✓ ${credits.toLocaleString()} credits added!`;
+        } else {
+          statusEl.style.color='#e05555'; statusEl.textContent='✗ Verification failed. Contact support.';
+        }
+      },
+      modal:{ ondismiss:()=>{ statusEl.textContent=''; } }
+    });
+    rzp.open(); statusEl.textContent='';
+  } catch(e) {
+    statusEl.style.color='#e05555'; statusEl.textContent='✗ '+e.message;
+  }
+}
+
+// ── Own-key AWS Polly (direct from browser) ───────────────────────────────
+function _getOwnKeyPolly() {
+  AWS.config.update({
+    accessKeyId:     CFG.ownkeyKey,
+    secretAccessKey: CFG.ownkeySecret,
+    region:          CFG.ownkeyRegion,
+    signatureVersion:'v4',
+  });
+  return new AWS.Polly();
+}
+
+async function _callOwnKeyPolly(text) {
+  const [VoiceId, Engine] = CFG.ownkeyVoice.split('|');
+  const rate  = Math.round(CFG.ownkeySpeed * 100) + '%';
+  const safeT = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const ssml  = `<speak><prosody rate="${rate}">${safeT}</prosody></speak>`;
+  return new Promise((res, rej) => {
+    _getOwnKeyPolly().synthesizeSpeech(
+      { Text:ssml, TextType:'ssml', OutputFormat:'mp3', VoiceId, Engine },
+      (err, data) => err ? rej(err) : res(new Blob([data.AudioStream], {type:'audio/mpeg'}))
+    );
+  });
+}
+
+async function verifyOwnKey() {
+  const el = document.getElementById('ownkey-status');
+  el.style.color='#7a7568'; el.textContent='⏳ Checking…';
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  try {
+    await _callOwnKeyPolly('Test');
+    el.style.color='#4caf7a'; el.textContent='✓ Keys valid — AWS Polly working!';
+  } catch(e) {
+    el.style.color='#e05555'; el.textContent='✗ '+(e.message||'Invalid keys or region');
+  }
+}
+
+async function testOwnKey() {
+  const el = document.getElementById('ownkey-status');
+  el.style.color='#7a7568'; el.textContent='⏳ Synthesising…';
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  CFG.ownkeySpeed  = parseFloat(document.getElementById('ownkey-speed-sl').value);
+  try {
+    const [id] = CFG.ownkeyVoice.split('|');
+    const blob = await _callOwnKeyPolly(`Hello! I am ${id}, a neural voice from AWS Polly. This is how your book will sound.`);
+    const url  = URL.createObjectURL(blob);
+    const a    = new Audio(url); a.onended=()=>URL.revokeObjectURL(url); a.play();
+    el.style.color='#4caf7a'; el.textContent='▶ Playing sample…';
+  } catch(e) {
+    el.style.color='#e05555'; el.textContent='✗ '+(e.message||'Check keys and region');
+  }
+}
+
+function testFreeVoice() {
+  cancelTTS();
+  const v = document.getElementById('free-voice-sel').value;
+  const r = parseFloat(document.getElementById('free-speed-sl').value);
+  const s = `Hello! This is the ${v} voice at your chosen speed. This is how your book will sound.`;
+  if (typeof responsiveVoice!=='undefined'&&responsiveVoice.voiceSupport()) {
+    responsiveVoice.speak(s, v, { rate:r });
+  } else {
+    const u=new SpeechSynthesisUtterance(s); u.rate=r; u.pitch=1; window.speechSynthesis.speak(u);
+  }
+}
+
+document.getElementById('lib-settings-btn').onclick = openSettings;
+document.getElementById('rd-settings-btn').onclick  = openSettings;
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('settings-modal')) closeSettings();
+});
+
+/* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
+const _silentBlob  = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+const _silentAudio = new Audio(_silentBlob);
+_silentAudio.loop = true; _silentAudio.volume = 0.001;
+let _pollyAudio = null;
+
+function toSentences(text) {
+  const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g)||[text];
+  const out=[]; let buf='';
+  for (const s of raw) {
+    if ((buf+s).length>2800){ if(buf.trim()) out.push(buf.trim()); buf=s; } else buf+=s;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length ? out : [text.substring(0,2800)];
+}
+
+function speakSentence() {
+  if (!isPlaying) return;
+  if (_sIdx >= _sentences.length) {
+    markDone(_paraIdx); curPara = _paraIdx + 1; _speakParaAt(curPara); return;
+  }
+  const text  = _sentences[_sIdx++];
+  const onEnd = () => { if (isPlaying) speakSentence(); };
+  const onErr = () => { if (isPlaying) speakSentence(); };
+
+  if (CFG.plan === 'ownkey' && CFG.ownkeyKey && CFG.ownkeySecret) {
+    // ── Own AWS keys, called directly from browser ────────────────────
+    _callOwnKeyPolly(text)
+      .then(blob => {
+        if (!isPlaying) return;
+        const url = URL.createObjectURL(blob);
+        _pollyAudio = new Audio(url);
+        _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
+        _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
+        _pollyAudio.play().catch(onErr);
+      })
+      .catch(e => { setStat('⚠️ AWS error: '+e.message); onErr(); });
+
+  } else if (CFG.plan === 'pay') {
+    // ── Our server (paid credits) ─────────────────────────────────────
+    fetch(`${SERVER}/api/synthesize`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, voice:CFG.pollyVoice, userId:USER_ID }),
+    })
+    .then(async r => {
+      if (r.status === 402) {
+        setStat('⚠️ Credits exhausted. Open Settings → Buy more.');
+        isPlaying = false;
+        document.getElementById('play-btn').textContent = '▶';
+        return null;
+      }
+      if (!r.ok) throw new Error('Server error '+r.status);
+      const freeLeft = r.headers.get('X-Free-Remaining');
+      const paid     = r.headers.get('X-Paid-Credits');
+      if (freeLeft) userCredits.freeRemaining = parseInt(freeLeft);
+      if (paid)     userCredits.paidCredits   = parseInt(paid);
+      updateCreditsBadge();
+      return r.blob();
+    })
+    .then(blob => {
+      if (!blob || !isPlaying) return;
+      const url = URL.createObjectURL(blob);
+      _pollyAudio = new Audio(url);
+      _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
+      _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
+      _pollyAudio.play().catch(onErr);
+    })
+    .catch(onErr);
+
+  } else {
+    // ── Free / ResponsiveVoice ────────────────────────────────────────
+    if (typeof responsiveVoice!=='undefined'&&responsiveVoice.voiceSupport()) {
+      responsiveVoice.speak(text, CFG.freeVoice, { rate:CFG.freeSpeed, onend:onEnd, onerror:onErr });
+    } else {
+      const u=new SpeechSynthesisUtterance(text);
+      u.rate=CFG.freeSpeed; u.pitch=1; u.onend=onEnd; u.onerror=onErr;
+      window.speechSynthesis.speak(u);
+    }
+  }
+}
+
+function _speakParaAt(idx) {
+  if (!isPlaying||idx>=allParas.length){ stopSpeech(); return; }
+  if (allParas[idx].heading){ curPara=idx+1; _speakParaAt(idx+1); return; }
+  const ch=chapters[curCh];
+  if (idx>=ch.end&&curCh<chapters.length-1){ curCh++; loadChapter(curCh); curPara=chapters[curCh].start; _speakParaAt(curPara); return; }
+  _paraIdx=idx; _sentences=toSentences(allParas[idx].text); _sIdx=0;
+  highlight(idx); scrollTo(idx); updateProgress(); saveCurrentPos();
+  updateMediaSession(); speakSentence();
+}
+
+function startReading(){ if(isPlaying||!allParas.length) return; isPlaying=true; document.getElementById('play-btn').textContent='⏸'; setStat(''); _silentAudio.play().catch(()=>{}); updateMediaSession('playing'); _speakParaAt(curPara); }
+function pauseReading(){ isPlaying=false; document.getElementById('play-btn').textContent='▶'; cancelTTS(); _silentAudio.pause(); updateMediaSession('paused'); }
+function stopSpeech()  { isPlaying=false; document.getElementById('play-btn').textContent='▶'; cancelTTS(); _silentAudio.pause(); updateMediaSession('none'); }
+function togglePlay()  { if(!allParas.length) return; isPlaying?pauseReading():startReading(); }
+function cancelTTS() {
+  if(typeof responsiveVoice!=='undefined') responsiveVoice.cancel();
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  if(_pollyAudio){ try{_pollyAudio.pause();}catch{} _pollyAudio=null; }
+}
+function setStat(s){ const el=document.getElementById('pl-stat'); if(el) el.textContent=s; }
+
+function updateMediaSession(state) {
+  if(!('mediaSession' in navigator)) return;
+  if(bookName&&chapters[curCh]) {
+    navigator.mediaSession.metadata=new MediaMetadata({ title:bookName, artist:chapters[curCh].title, album:`Chapter ${curCh+1} of ${chapters.length}`, artwork:[{src:_makeIconURL(192),sizes:'192x192',type:'image/png'}] });
+  }
+  if(state) navigator.mediaSession.playbackState=state;
+  navigator.mediaSession.setActionHandler('play',startReading);
+  navigator.mediaSession.setActionHandler('pause',pauseReading);
+  navigator.mediaSession.setActionHandler('stop',stopSpeech);
+  navigator.mediaSession.setActionHandler('nexttrack',()=>document.getElementById('p-next').click());
+  navigator.mediaSession.setActionHandler('previoustrack',()=>document.getElementById('p-prev').click());
+}
+function _makeIconURL(size){ const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');x.fillStyle='#181613';x.fillRect(0,0,size,size);x.font=`${size*.58}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText('📖',size/2,size/2);return c.toDataURL('image/png'); }
+
+// Generate a stable userId per browser (stored in IndexedDB)
+async function getUserId() {
+  const saved = await DB.getPos('__userid__');
+  if (saved && saved.uid) return saved.uid;
+  const uid = 'bv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+  await DB.savePos('__userid__', { name:'__userid__', uid });
+  return uid;
+}
+
+/* ═══ SETTINGS STATE ═════════════════════════════════════════════════════ */
+let CFG = {
+  plan:       'free',
+  freeVoice:  'UK English Female',
+  freeSpeed:  0.9,
+  pollyVoice: 'Amy|neural',
+  pollySpeed: 0.9,
+};
+let USER_ID      = '';
+let userCredits  = { freeRemaining: 50000, paidCredits: 0, freeMonthly: 50000 };
+
+async function loadSettings() {
+  try {
+    const s = await DB.getPos('__settings__');
+    if (s) Object.assign(CFG, s);
+  } catch {}
+}
+async function persistSettings() {
+  await DB.savePos('__settings__', { ...CFG, name:'__settings__' });
+}
+
+async function fetchCredits() {
+  try {
+    const r = await fetch(`${SERVER}/api/credits?userId=${USER_ID}`);
+    if (r.ok) {
+      userCredits = await r.json();
+      updateCreditsBadge();
+    }
+  } catch {}
+}
+
+function updateCreditsBadge() {
+  const badge = document.getElementById('credits-badge');
+  if (!badge) return;
+  if (CFG.plan === 'free') {
+    badge.textContent = `Free: ${(userCredits.freeRemaining/1000).toFixed(0)}K chars left`;
+    badge.style.color = userCredits.freeRemaining < 10000 ? '#e8a84c' : '#7a7568';
+  } else {
+    badge.textContent = `Credits: ${(userCredits.paidCredits/1000).toFixed(0)}K chars`;
+    badge.style.color = userCredits.paidCredits < 10000 ? '#e8a84c' : '#c9a84c';
+  }
+  badge.style.display = 'block';
+}
+
+/* ═══ SETTINGS MODAL ════════════════════════════════════════════════════ */
+let _activePlan = 'free';
+
+function openSettings() {
+  document.getElementById('free-voice-sel').value  = CFG.freeVoice;
+  document.getElementById('free-speed-sl').value   = CFG.freeSpeed;
+  document.getElementById('free-spd-lbl').textContent = CFG.freeSpeed.toFixed(1) + '×';
+  document.getElementById('polly-voice-sel').value = CFG.pollyVoice;
+  document.getElementById('polly-speed-sl').value  = CFG.pollySpeed;
+  document.getElementById('polly-spd-lbl').textContent = CFG.pollySpeed.toFixed(1) + '×';
+  selectPlan(CFG.plan, false);
+  updateCreditsDisplay();
+  loadPackButtons();
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+}
+async function saveSettings() {
+  CFG.plan       = _activePlan;
+  CFG.freeVoice  = document.getElementById('free-voice-sel').value;
+  CFG.freeSpeed  = parseFloat(document.getElementById('free-speed-sl').value);
+  CFG.pollyVoice = document.getElementById('polly-voice-sel').value;
+  CFG.pollySpeed = parseFloat(document.getElementById('polly-speed-sl').value);
+  await persistSettings();
+  updateCreditsBadge();
+  closeSettings();
+}
+
+function selectPlan(plan) {
+  _activePlan = plan;
+  const fCard  = document.getElementById('plan-free-card');
+  const pCard  = document.getElementById('plan-premium-card');
+  const fBadge = document.getElementById('plan-free-badge');
+  const pBadge = document.getElementById('plan-premium-badge');
+  if (plan === 'free') {
+    fCard.style.border='2px solid #c9a84c'; pCard.style.border='1px solid #2f2c26';
+    fBadge.textContent='✓ ACTIVE'; fBadge.style.color='#c9a84c';
+    pBadge.textContent='BUY CREDITS'; pBadge.style.color='#7a7568';
+    document.getElementById('free-settings').style.display='block';
+    document.getElementById('premium-settings').style.display='none';
+  } else {
+    pCard.style.border='2px solid #c9a84c'; fCard.style.border='1px solid #2f2c26';
+    pBadge.textContent='✓ ACTIVE'; pBadge.style.color='#c9a84c';
+    fBadge.textContent='CURRENT'; fBadge.style.color='#7a7568';
+    document.getElementById('premium-settings').style.display='block';
+    document.getElementById('free-settings').style.display='none';
+  }
+}
+
+function updateCreditsDisplay() {
+  const fLeft = userCredits.freeRemaining;
+  const fTotal = userCredits.freeMonthly;
+  document.getElementById('free-used-display').textContent =
+    `${fLeft.toLocaleString()} / ${fTotal.toLocaleString()} chars remaining this month`;
+  document.getElementById('free-quota-bar').style.width = (fLeft / fTotal * 100) + '%';
+  document.getElementById('paid-credits-display').textContent =
+    (userCredits.paidCredits || 0).toLocaleString();
+  document.getElementById('paid-pages-display').textContent =
+    `≈ ${Math.floor((userCredits.paidCredits || 0) / 1500)} pages of reading left`;
+}
+
+async function loadPackButtons() {
+  const container = document.getElementById('packs-container');
+  container.innerHTML = '<div style="font-size:.72rem;color:#7a7568;">Loading packs…</div>';
+  try {
+    const r     = await fetch(`${SERVER}/api/packs`);
+    const packs = await r.json();
+    container.innerHTML = '';
+    packs.forEach(pack => {
+      const priceINR = (pack.amount / 100).toLocaleString('en-IN');
+      const btn = document.createElement('button');
+      btn.style.cssText='display:flex;align-items:center;justify-content:space-between;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:12px 16px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:.78rem;width:100%;text-align:left;transition:border-color .15s;';
+      btn.innerHTML=`<span><b style="color:#c9a84c">${pack.credits.toLocaleString()}</b> chars <span style="color:#7a7568">≈${pack.pages} pages</span></span><span style="background:#c9a84c;color:#0f0e0c;padding:4px 12px;border-radius:6px;font-weight:700;">₹${priceINR}</span>`;
+      btn.onmouseover=()=>btn.style.borderColor='#c9a84c';
+      btn.onmouseout=()=>btn.style.borderColor='#2f2c26';
+      btn.onclick=()=>buyCredits(pack.id, pack.amount, pack.label);
+      container.appendChild(btn);
+    });
+  } catch {
+    container.innerHTML = '<div style="font-size:.72rem;color:#e05555;">Could not load packs — is the server running?</div>';
+  }
+}
+
+async function buyCredits(packId, amount, label) {
+  const statusEl = document.getElementById('payment-status');
+  statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Creating order…';
+  try {
+    const r   = await fetch(`${SERVER}/api/create-order`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ pack: packId, userId: USER_ID })
+    });
+    const ord = await r.json();
+    if (!r.ok) throw new Error(ord.error);
+
+    const rzp = new Razorpay({
+      key:         ord.key,
+      amount:      ord.amount,
+      currency:    ord.currency,
+      name:        'BookVoice Premium',
+      description: label,
+      order_id:    ord.orderId,
+      theme:       { color: '#c9a84c' },
+      handler: async (resp) => {
+        statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Verifying payment…';
+        const vr = await fetch(`${SERVER}/api/verify-payment`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ...resp, userId: USER_ID, pack: packId })
+        });
+        const vd = await vr.json();
+        if (vd.success) {
+          await fetchCredits();
+          updateCreditsDisplay();
+          statusEl.style.color='#4caf7a';
+          statusEl.textContent=`✓ ${ord.credits?.toLocaleString() || ''} credits added!`;
+        } else {
+          statusEl.style.color='#e05555'; statusEl.textContent='✗ Verification failed. Contact support.';
+        }
+      },
+      modal: { ondismiss: ()=>{ statusEl.textContent=''; } }
+    });
+    rzp.open();
+    statusEl.textContent='';
+  } catch(e) {
+    statusEl.style.color='#e05555'; statusEl.textContent='✗ ' + e.message;
+  }
+}
+
+function testFreeVoice() {
+  cancelTTS();
+  const voice  = document.getElementById('free-voice-sel').value;
+  const rate   = parseFloat(document.getElementById('free-speed-sl').value);
+  const sample = `Hello! This is the ${voice} voice. This is how your book will sound when read aloud.`;
+  if (typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport()) {
+    responsiveVoice.speak(sample, voice, { rate });
+  } else {
+    const u = new SpeechSynthesisUtterance(sample);
+    u.rate = rate; u.pitch = 1; window.speechSynthesis.speak(u);
+  }
+}
+
+document.getElementById('lib-settings-btn').onclick = openSettings;
+document.getElementById('rd-settings-btn').onclick  = openSettings;
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('settings-modal')) closeSettings();
+});
+
+/* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
+const _silentBlob  = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+const _silentAudio = new Audio(_silentBlob);
+_silentAudio.loop = true; _silentAudio.volume = 0.001;
+let _pollyAudio = null;
+
+function toSentences(text) {
+  const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g) || [text];
+  const out = []; let buf = '';
+  for (const s of raw) {
+    if ((buf + s).length > 2800) { if (buf.trim()) out.push(buf.trim()); buf = s; }
+    else buf += s;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length ? out : [text.substring(0, 2800)];
+}
+
+function speakSentence() {
+  if (!isPlaying) return;
+  if (_sIdx >= _sentences.length) {
+    markDone(_paraIdx); curPara = _paraIdx + 1; _speakParaAt(curPara); return;
+  }
+  const text   = _sentences[_sIdx++];
+  const onEnd  = () => { if (isPlaying) speakSentence(); };
+  const onErr  = () => { if (isPlaying) speakSentence(); };
+
+  if (CFG.plan === 'premium') {
+    // ── AWS Polly via backend ──────────────────────────────────────────
+    fetch(`${SERVER}/api/synthesize`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text, voice: CFG.pollyVoice, userId: USER_ID }),
+    })
+    .then(async r => {
+      if (r.status === 402) {
+        // Out of credits — show notification and fall back to free voice
+        const d = await r.json();
+        setStat('⚠️ Credits exhausted — switch to Free or buy more.');
+        isPlaying = false;
+        document.getElementById('play-btn').textContent = '▶';
+        return;
+      }
+      if (!r.ok) throw new Error('Server error');
+      // Update credits from response headers
+      const freeLeft = r.headers.get('X-Free-Remaining');
+      const paid     = r.headers.get('X-Paid-Credits');
+      if (freeLeft) userCredits.freeRemaining = parseInt(freeLeft);
+      if (paid)     userCredits.paidCredits   = parseInt(paid);
+      updateCreditsBadge();
+      return r.blob();
+    })
+    .then(blob => {
+      if (!blob || !isPlaying) return;
+      const url = URL.createObjectURL(blob);
+      _pollyAudio = new Audio(url);
+      _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio = null; onEnd(); };
+      _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio = null; onErr(); };
+      _pollyAudio.play().catch(onErr);
+    })
+    .catch(onErr);
+
+  } else {
+    // ── Free / ResponsiveVoice ─────────────────────────────────────────
+    if (typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport()) {
+      responsiveVoice.speak(text, CFG.freeVoice, { rate: CFG.freeSpeed, onend: onEnd, onerror: onErr });
+    } else {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = CFG.freeSpeed; u.pitch = 1; u.onend = onEnd; u.onerror = onErr;
+      window.speechSynthesis.speak(u);
+    }
+  }
+}
+
+function _speakParaAt(idx) {
+  if (!isPlaying || idx >= allParas.length) { stopSpeech(); return; }
+  if (allParas[idx].heading)               { curPara = idx + 1; _speakParaAt(idx + 1); return; }
+  const ch = chapters[curCh];
+  if (idx >= ch.end && curCh < chapters.length - 1) {
+    curCh++; loadChapter(curCh); curPara = chapters[curCh].start; _speakParaAt(curPara); return;
+  }
+  _paraIdx = idx; _sentences = toSentences(allParas[idx].text); _sIdx = 0;
+  highlight(idx); scrollTo(idx); updateProgress(); saveCurrentPos();
+  updateMediaSession();
+  speakSentence();
+}
+
+function startReading() {
+  if (isPlaying || !allParas.length) return;
+  isPlaying = true;
+  document.getElementById('play-btn').textContent = '⏸';
+  setStat('');
+  _silentAudio.play().catch(() => {});
+  updateMediaSession('playing');
+  _speakParaAt(curPara);
+}
+function pauseReading() {
+  isPlaying = false;
+  document.getElementById('play-btn').textContent = '▶';
+  cancelTTS(); _silentAudio.pause(); updateMediaSession('paused');
+}
+function stopSpeech() {
+  isPlaying = false;
+  document.getElementById('play-btn').textContent = '▶';
+  cancelTTS(); _silentAudio.pause(); updateMediaSession('none');
+}
+function togglePlay() { if (!allParas.length) return; isPlaying ? pauseReading() : startReading(); }
+function cancelTTS() {
+  if (typeof responsiveVoice !== 'undefined') responsiveVoice.cancel();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (_pollyAudio) { try { _pollyAudio.pause(); } catch {} _pollyAudio = null; }
+}
+function setStat(s) { const el=document.getElementById('pl-stat'); if(el) el.textContent=s; }
+
+// ── Media Session ─────────────────────────────────────────────────────────
+function updateMediaSession(state) {
+  if (!('mediaSession' in navigator)) return;
+  if (bookName && chapters[curCh]) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: bookName, artist: chapters[curCh].title,
+      album: `Chapter ${curCh + 1} of ${chapters.length}`,
+      artwork: [{ src: _makeIconURL(192), sizes:'192x192', type:'image/png' }]
+    });
+  }
+  if (state) navigator.mediaSession.playbackState = state;
+  navigator.mediaSession.setActionHandler('play',          startReading);
+  navigator.mediaSession.setActionHandler('pause',         pauseReading);
+  navigator.mediaSession.setActionHandler('stop',          stopSpeech);
+  navigator.mediaSession.setActionHandler('nexttrack',     () => document.getElementById('p-next').click());
+  navigator.mediaSession.setActionHandler('previoustrack', () => document.getElementById('p-prev').click());
+}
+function _makeIconURL(size) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle='#181613'; x.fillRect(0,0,size,size);
+  x.font=`${size*.58}px serif`; x.textAlign='center'; x.textBaseline='middle';
+  x.fillText('📖', size/2, size/2); return c.toDataURL('image/png');
+}
+
+async function loadSettings() {
+  try {
+    const s = await DB.getPos('__settings__');
+    if (s) Object.assign(CFG, s);
+  } catch {}
+}
+async function persistSettings() {
+  await DB.savePos('__settings__', { ...CFG, name:'__settings__' });
+}
+
+// ── Settings Modal ────────────────────────────────────────────────────────
+function openSettings() {
+  // Populate fields from CFG
+  document.getElementById('free-voice-sel').value  = CFG.freeVoice;
+  document.getElementById('free-speed-sl').value   = CFG.freeSpeed;
+  document.getElementById('free-spd-lbl').textContent = CFG.freeSpeed.toFixed(1) + '×';
+  document.getElementById('aws-key').value         = CFG.awsKey;
+  document.getElementById('aws-secret').value      = CFG.awsSecret;
+  document.getElementById('aws-region').value      = CFG.awsRegion;
+  document.getElementById('polly-voice-sel').value = CFG.pollyVoice;
+  document.getElementById('polly-speed-sl').value  = CFG.pollySpeed;
+  document.getElementById('polly-spd-lbl').textContent = CFG.pollySpeed.toFixed(1) + '×';
+  selectPlan(CFG.plan, false);
+  const m = document.getElementById('settings-modal');
+  m.style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+  document.getElementById('polly-status').textContent = '';
+}
+async function saveSettings() {
+  CFG.plan       = document.getElementById('plan-free-card').style.borderWidth === '2px' &&
+                   document.getElementById('plan-free-card').style.borderColor.includes('201') ? 'free' : 'premium';
+  // read which plan card is active
+  CFG.plan       = _activePlan;
+  CFG.freeVoice  = document.getElementById('free-voice-sel').value;
+  CFG.freeSpeed  = parseFloat(document.getElementById('free-speed-sl').value);
+  CFG.awsKey     = document.getElementById('aws-key').value.trim();
+  CFG.awsSecret  = document.getElementById('aws-secret').value.trim();
+  CFG.awsRegion  = document.getElementById('aws-region').value;
+  CFG.pollyVoice = document.getElementById('polly-voice-sel').value;
+  CFG.pollySpeed = parseFloat(document.getElementById('polly-speed-sl').value);
+  await persistSettings();
+  // Sync the in-reader voice selector label
+  updateVoiceBadge();
+  closeSettings();
+}
+
+let _activePlan = 'free';
+function selectPlan(plan, animate=true) {
+  _activePlan = plan;
+  const fCard = document.getElementById('plan-free-card');
+  const pCard = document.getElementById('plan-premium-card');
+  const fBadge = document.getElementById('plan-free-badge');
+  const pBadge = document.getElementById('plan-premium-badge');
+  const fSet  = document.getElementById('free-settings');
+  const pSet  = document.getElementById('premium-settings');
+
+  if (plan === 'free') {
+    fCard.style.border = '2px solid #c9a84c';
+    pCard.style.border = '1px solid #2f2c26';
+    fBadge.textContent = '✓ ACTIVE'; fBadge.style.color = '#c9a84c';
+    pBadge.textContent = 'AWS REQUIRED'; pBadge.style.color = '#7a7568';
+    fSet.style.display = 'block'; pSet.style.display = 'none';
+  } else {
+    pCard.style.border = '2px solid #c9a84c';
+    fCard.style.border = '1px solid #2f2c26';
+    pBadge.textContent = '✓ ACTIVE'; pBadge.style.color = '#c9a84c';
+    fBadge.textContent = 'CURRENT'; fBadge.style.color = '#7a7568';
+    pSet.style.display = 'block'; fSet.style.display = 'none';
+  }
+}
+
+function updateVoiceBadge() {
+  // Update the small player voice display
+  const sel = document.getElementById('voice-sel');
+  if (!sel) return;
+  if (CFG.plan === 'free') {
+    sel.value = CFG.freeVoice;
+  } else {
+    const [id] = CFG.pollyVoice.split('|');
+    // find matching option or set text
+    Array.from(sel.options).forEach(o => { if (o.value === CFG.pollyVoice) sel.value = CFG.pollyVoice; });
+  }
+}
+
+// Wire settings buttons
+document.getElementById('lib-settings-btn').onclick = openSettings;
+document.getElementById('rd-settings-btn').onclick  = openSettings;
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('settings-modal')) closeSettings();
+});
+
+// ── AWS Polly helpers ─────────────────────────────────────────────────────
+function getPollyClient() {
+  AWS.config.update({
+    accessKeyId:     CFG.awsKey,
+    secretAccessKey: CFG.awsSecret,
+    region:          CFG.awsRegion,
+    signatureVersion:'v4',
+  });
+  return new AWS.Polly();
+}
+
+async function pollySpeak(text) {
+  const [VoiceId, Engine] = CFG.pollyVoice.split('|');
+  const polly = getPollyClient();
+  // SSML rate control
+  const rate = CFG.pollySpeed !== 1 ? Math.round(CFG.pollySpeed * 100) + '%' : '100%';
+  const ssml = `<speak><prosody rate="${rate}">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</prosody></speak>`;
+
+  return new Promise((resolve, reject) => {
+    polly.synthesizeSpeech({
+      Text:         ssml,
+      TextType:     'ssml',
+      OutputFormat: 'mp3',
+      VoiceId,
+      Engine,
+    }, (err, data) => {
+      if (err) reject(err);
+      else resolve(new Blob([data.AudioStream], { type:'audio/mpeg' }));
+    });
+  });
+}
+
+async function verifyPollyKeys() {
+  const el = document.getElementById('polly-status');
+  el.style.color = '#7a7568'; el.textContent = '⏳ Checking keys…';
+  try {
+    CFG.awsKey    = document.getElementById('aws-key').value.trim();
+    CFG.awsSecret = document.getElementById('aws-secret').value.trim();
+    CFG.awsRegion = document.getElementById('aws-region').value;
+    CFG.pollyVoice = document.getElementById('polly-voice-sel').value;
+    await pollySpeak('Test');
+    el.style.color = '#4caf7a'; el.textContent = '✓ Keys are valid — AWS Polly is working!';
+  } catch(e) {
+    el.style.color = '#e05555'; el.textContent = '✗ ' + (e.message || 'Invalid keys or network error');
+  }
+}
+
+async function testPollyVoice() {
+  const el = document.getElementById('polly-status');
+  el.style.color = '#7a7568'; el.textContent = '⏳ Synthesizing…';
+  try {
+    CFG.awsKey     = document.getElementById('aws-key').value.trim();
+    CFG.awsSecret  = document.getElementById('aws-secret').value.trim();
+    CFG.awsRegion  = document.getElementById('aws-region').value;
+    CFG.pollyVoice = document.getElementById('polly-voice-sel').value;
+    CFG.pollySpeed = parseFloat(document.getElementById('polly-speed-sl').value);
+    const [id] = CFG.pollyVoice.split('|');
+    const blob = await pollySpeak(`Hello! I am ${id}, a neural voice powered by AWS Polly. This is how your book will sound.`);
+    const url  = URL.createObjectURL(blob);
+    const a    = new Audio(url);
+    a.onended  = () => URL.revokeObjectURL(url);
+    a.play();
+    el.style.color = '#4caf7a'; el.textContent = '▶ Playing sample…';
+  } catch(e) {
+    el.style.color = '#e05555'; el.textContent = '✗ ' + (e.message || 'Check your keys and region');
+  }
+}
+
+function testVoice() {
+  cancelTTS();
+  const voice  = document.getElementById('free-voice-sel').value;
+  const rate   = parseFloat(document.getElementById('free-speed-sl').value);
+  const sample = `Hello! This is the ${voice} voice. This is how your book will sound when read aloud.`;
+  if (typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport()) {
+    responsiveVoice.speak(sample, voice, { rate });
+  } else {
+    const u = new SpeechSynthesisUtterance(sample);
+    u.rate = rate; u.pitch = 1; window.speechSynthesis.speak(u);
+  }
+}
+
+/* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
+// Silent audio to activate Media Session on Android
+const _silentBlob  = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+const _silentAudio = new Audio(_silentBlob);
+_silentAudio.loop = true; _silentAudio.volume = 0.001;
+
+// Current polly audio element (for pause/resume)
+let _pollyAudio = null;
+
+function toSentences(text) {
+  const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g) || [text];
+  const out = []; let buf = '';
+  for (const s of raw) {
+    if ((buf + s).length > 2800) { if (buf.trim()) out.push(buf.trim()); buf = s; }
+    else buf += s;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length ? out : [text.substring(0, 2800)];
+}
+
+function speakSentence() {
+  if (!isPlaying) return;
+  if (_sIdx >= _sentences.length) {
+    markDone(_paraIdx); curPara = _paraIdx + 1; _speakParaAt(curPara); return;
+  }
+  const text = _sentences[_sIdx++];
+  const onEnd = () => { if (isPlaying) speakSentence(); };
+  const onErr = () => { if (isPlaying) speakSentence(); };
+
+  if (CFG.plan === 'premium' && CFG.awsKey && CFG.awsSecret) {
+    // ── AWS Polly path ──────────────────────────────────────────────────
+    pollySpeak(text).then(blob => {
+      if (!isPlaying) return;
+      const url = URL.createObjectURL(blob);
+      _pollyAudio = new Audio(url);
+      _pollyAudio.playbackRate = 1; // speed already applied via SSML
+      _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio = null; onEnd(); };
+      _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio = null; onErr(); };
+      _pollyAudio.play().catch(onErr);
+    }).catch(onErr);
+  } else {
+    // ── Free / ResponsiveVoice path ─────────────────────────────────────
+    const voice = CFG.freeVoice;
+    const rate  = CFG.freeSpeed;
+    if (typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport()) {
+      responsiveVoice.speak(text, voice, { rate, onend: onEnd, onerror: onErr });
+    } else {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = rate; u.pitch = 1; u.onend = onEnd; u.onerror = onErr;
+      window.speechSynthesis.speak(u);
+    }
+  }
+}
+
+function _speakParaAt(idx) {
+  if (!isPlaying || idx >= allParas.length) { stopSpeech(); return; }
+  if (allParas[idx].heading) { curPara = idx + 1; _speakParaAt(idx + 1); return; }
+  const ch = chapters[curCh];
+  if (idx >= ch.end && curCh < chapters.length - 1) {
+    curCh++; loadChapter(curCh); curPara = chapters[curCh].start; _speakParaAt(curPara); return;
+  }
+  _paraIdx = idx; _sentences = toSentences(allParas[idx].text); _sIdx = 0;
+  highlight(idx); scrollTo(idx); updateProgress(); saveCurrentPos();
+  updateMediaSession();
+  speakSentence();
+}
+
+function startReading() {
+  if (isPlaying || !allParas.length) return;
+  isPlaying = true;
+  document.getElementById('play-btn').textContent = '⏸';
+  _silentAudio.play().catch(() => {});
+  updateMediaSession('playing');
+  _speakParaAt(curPara);
+}
+function pauseReading() {
+  isPlaying = false;
+  document.getElementById('play-btn').textContent = '▶';
+  cancelTTS(); _silentAudio.pause();
+  updateMediaSession('paused');
+}
+function stopSpeech() {
+  isPlaying = false;
+  document.getElementById('play-btn').textContent = '▶';
+  cancelTTS(); _silentAudio.pause();
+  updateMediaSession('none');
+}
+function togglePlay() { if (!allParas.length) return; isPlaying ? pauseReading() : startReading(); }
+
+function cancelTTS() {
+  if (typeof responsiveVoice !== 'undefined') responsiveVoice.cancel();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (_pollyAudio) { try { _pollyAudio.pause(); } catch {} _pollyAudio = null; }
+}
+
+// Voice change → restart current para
+document.getElementById('voice-sel').addEventListener('change', () => {
+  if (!isPlaying) return;
+  cancelTTS();
+  _sentences = toSentences(allParas[_paraIdx]?.text || '');
+  _sIdx = 0; speakSentence();
+});
+document.getElementById('test-voice-btn').addEventListener('click', () => {
+  cancelTTS();
+  const voice  = CFG.freeVoice;
+  const rate   = CFG.freeSpeed;
+  const sample = `Hello! This is a test of the selected voice at your chosen speed.`;
+  if (typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport()) {
+    responsiveVoice.speak(sample, voice, { rate });
+  } else {
+    const u = new SpeechSynthesisUtterance(sample);
+    u.rate = rate; u.pitch = 1; window.speechSynthesis.speak(u);
+  }
+});
+
+// ── Media Session ─────────────────────────────────────────────────────────
+function updateMediaSession(state) {
+  if (!('mediaSession' in navigator)) return;
+  if (bookName && chapters[curCh]) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  bookName, artist: chapters[curCh].title,
+      album:  `Chapter ${curCh + 1} of ${chapters.length}`,
+      artwork: [{ src: _makeIconURL(192), sizes:'192x192', type:'image/png' }]
+    });
+  }
+  if (state) navigator.mediaSession.playbackState = state;
+  navigator.mediaSession.setActionHandler('play',          startReading);
+  navigator.mediaSession.setActionHandler('pause',         pauseReading);
+  navigator.mediaSession.setActionHandler('stop',          stopSpeech);
+  navigator.mediaSession.setActionHandler('nexttrack',     () => document.getElementById('p-next').click());
+  navigator.mediaSession.setActionHandler('previoustrack', () => document.getElementById('p-prev').click());
+}
+function _makeIconURL(size) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = '#181613'; x.fillRect(0,0,size,size);
+  x.font = `${size*.58}px serif`; x.textAlign='center'; x.textBaseline='middle';
+  x.fillText('📖', size/2, size/2); return c.toDataURL('image/png');
+}
+
+/* ═══ CONTROLS ════════════════════════════════════════════════════════════ */
+document.getElementById('play-btn').onclick=togglePlay;
+document.getElementById('p-next').onclick=()=>{
+  const was=isPlaying; stopSpeech();
+  curPara=Math.min(curPara+1,allParas.length-1);
+  while(curPara<allParas.length-1&&allParas[curPara].heading) curPara++;
+  highlight(curPara); scrollTo(curPara); updateProgress();
+  if(was) startReading();
+};
+document.getElementById('p-prev').onclick=()=>{
+  const was=isPlaying; stopSpeech();
+  curPara=Math.max(curPara-1,0);
+  while(curPara>0&&allParas[curPara].heading) curPara--;
+  highlight(curPara); scrollTo(curPara); updateProgress();
+  if(was) startReading();
+};
+document.getElementById('ch-next').onclick=()=>{ if(curCh<chapters.length-1){stopSpeech();loadChapter(curCh+1);} };
+document.getElementById('ch-prev').onclick=()=>{ if(curCh>0){stopSpeech();loadChapter(curCh-1);} };
+document.getElementById('scrub-wrap').addEventListener('click',e=>{
+  if(!allParas.length) return;
+  const pct=e.offsetX/e.currentTarget.offsetWidth;
+  jumpTo(Math.floor(pct*allParas.length));
+});
+document.getElementById('speed-sl').oninput=function(){
+  document.getElementById('spd-val').textContent=parseFloat(this.value).toFixed(1)+'×';
+};
+
+/* ═══ HELPERS ═════════════════════════════════════════════════════════════ */
+function highlight(idx){ document.querySelectorAll('.para').forEach(e=>e.classList.remove('reading')); document.querySelector(`.para[data-idx="${idx}"]`)?.classList.add('reading'); }
+function markDone(idx){ const e=document.querySelector(`.para[data-idx="${idx}"]`); if(e){e.classList.remove('reading');e.classList.add('done');} }
+function scrollTo(idx){ document.querySelector(`.para[data-idx="${idx}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}); }
+function jumpTo(idx){ stopSpeech(); curPara=idx; highlight(idx); scrollTo(idx); updateProgress(); }
+
+function updateProgress(){
+  const ch=chapters[curCh]; if(!ch) return;
+  document.getElementById('pl-now').textContent=ch.title;
+  document.getElementById('pl-det').textContent=`Ch ${curCh+1}/${chapters.length}  ·  §${curPara-ch.start+1}/${ch.end-ch.start}  ·  p.${allParas[curPara]?.page||'?'}`;
+  const pct=allParas.length?(curPara/allParas.length)*100:0;
+  document.getElementById('scrub-fill').style.width=pct+'%';
+}
+
+function saveCurrentPos(){
+  if (!bookName||!allParas.length) return;
+  DB.savePos(bookName, { ch:curCh, para:curPara, page:allParas[curPara]?.page||0 });
+}
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ═══ DELETE ══════════════════════════════════════════════════════════════ */
+function askDelete(name){
+  bookToDelete=name;
+  document.getElementById('del-name').textContent=name;
+  document.getElementById('del-confirm').classList.add('show');
+}
+function closeDel(){ document.getElementById('del-confirm').classList.remove('show'); bookToDelete=null; }
+async function confirmDelete(){
+  if (!bookToDelete) return;
+  await DB.deleteBook(bookToDelete);
+  closeDel();
+  showLibrary();
+}
+
+/* ═══ KEYBOARD ════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(e.code==='Space')     { e.preventDefault(); togglePlay(); }
+  if(e.code==='ArrowRight') document.getElementById('p-next').click();
+  if(e.code==='ArrowLeft')  document.getElementById('p-prev').click();
+  if(e.code==='ArrowUp')    document.getElementById('ch-prev').click();
+  if(e.code==='ArrowDown')  document.getElementById('ch-next').click();
+});
+
+/* ═══ INIT ════════════════════════════════════════════════════════════════ */
+(async () => {
+  await DB.init();
+  USER_ID = await getUserId();
+  await loadSettings();
+  fetchCredits(); // non-blocking
+  bindFileInputs();
+  showLibrary();
+})();
+</script>
+<!-- ═══ SETTINGS MODAL ═══ -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#181613;border:1px solid #2f2c26;border-radius:18px;width:100%;max-width:500px;max-height:92vh;overflow-y:auto;padding:26px 24px;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.15rem;color:#e8e4d9;">Voice Settings</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;margin-top:2px;letter-spacing:.08em;">CHOOSE HOW YOU WANT TO LISTEN</div>
+      </div>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#7a7568;font-size:1.5rem;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+    </div>
+
+    <!-- ── 3 PLAN CARDS ── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+
+      <div id="pc-free" onclick="selectPlan('free')" style="border:2px solid #c9a84c;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🎙️</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Free</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Standard voice<br/>50K chars/mo</div>
+        <div id="pb-free" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#c9a84c;">✓ ACTIVE</div>
+      </div>
+
+      <div id="pc-ownkey" onclick="selectPlan('ownkey')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🔑</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Own Keys</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Your AWS keys<br/>Neural quality</div>
+        <div id="pb-ownkey" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">ENTER KEYS</div>
+      </div>
+
+      <div id="pc-pay" onclick="selectPlan('pay')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🌟</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Premium</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Our server<br/>Buy credits</div>
+        <div id="pb-pay" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">BUY CREDITS</div>
+      </div>
+
+    </div>
+
+    <!-- ── FREE PANEL ── -->
+    <div id="panel-free">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Voice &amp; Speed</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Voice</div>
+          <select id="free-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:6px 8px;border-radius:8px;font-family:inherit;font-size:.72rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
+            <optgroup label="🇺🇸 American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
+            <optgroup label="🇦🇺 Australian"><option value="Australian Female">Australian Female</option></optgroup>
+            <optgroup label="🇮🇳 Indian"><option value="Indian English Female">Indian Female</option></optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Speed — <span id="free-spd-lbl">0.9×</span></div>
+          <input type="range" id="free-speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"
+            oninput="document.getElementById('free-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+      <button onclick="testFreeVoice()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
+      <div style="margin-top:12px;padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:#7a7568;">Free quota this month: <span id="free-used-display" style="color:#c9a84c;">—</span></div>
+        <div style="width:100%;height:2px;background:#2f2c26;border-radius:2px;margin-top:6px;"><div id="free-quota-bar" style="height:2px;background:#c9a84c;border-radius:2px;width:0%;"></div></div>
+      </div>
+    </div>
+
+    <!-- ── OWN KEYS PANEL ── -->
+    <div id="panel-ownkey" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Your AWS Polly Keys</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Access Key ID</div>
+          <input id="ownkey-key" type="password" placeholder="AKIAIOSFODNN7EXAMPLE"
+            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Secret Access Key</div>
+          <input id="ownkey-secret" type="password" placeholder="wJalrXUtnFEMI/K7MDENG…"
+            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Region</div>
+            <select id="ownkey-region" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+              <option value="ap-south-1">ap-south-1 (Mumbai) ★</option>
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
+            <select id="ownkey-voice" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+              <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
+              <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option><option value="Stephen|neural">Stephen ♂</option></optgroup>
+              <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
+              <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
+              <optgroup label="🇮🇳 Standard"><option value="Aditi|standard">Aditi ♀</option><option value="Raveena|standard">Raveena ♀</option></optgroup>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="ownkey-spd-lbl">0.9×</span></div>
+          <input type="range" id="ownkey-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
+            oninput="document.getElementById('ownkey-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <button onclick="testOwnKey()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
+        <button onclick="verifyOwnKey()" style="background:#0f0e0c;border:1px solid #c9a84c;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">✓ Verify Keys</button>
+      </div>
+      <div id="ownkey-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;margin-bottom:8px;"></div>
+      <div style="padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;font-size:.65rem;color:#7a7568;line-height:1.6;">
+        <b style="color:#e8e4d9;">Keys stored only in your browser</b> — sent directly to AWS, never to our server.<br/>
+        Create an IAM user with only <code style="color:#c9a84c;">polly:SynthesizeSpeech</code> permission.<br/>
+        Cost: Neural ~$16/1M chars, Standard ~$4/1M chars.
+      </div>
+    </div>
+
+    <!-- ── PAY US PANEL ── -->
+    <div id="panel-pay" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Premium — AWS Polly via Our Server</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
+          <select id="polly-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
+            <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option></optgroup>
+            <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
+            <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="polly-spd-lbl">0.9×</span></div>
+          <input type="range" id="polly-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
+            oninput="document.getElementById('polly-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+      <div style="background:#0f0e0c;border:1px solid #2f2c26;border-radius:10px;padding:12px;margin-bottom:12px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Your Credits</div>
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span id="paid-credits-display" style="font-size:1.4rem;font-weight:700;font-family:'DM Mono',monospace;color:#c9a84c;">—</span>
+          <span style="font-size:.7rem;color:#7a7568;">characters · ≈<span id="paid-pages-display">—</span> pages left</span>
+        </div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">Buy Credits</div>
+      <div id="packs-container" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;"></div>
+      <div id="payment-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;"></div>
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeSettings()" style="background:#211f1a;border:1px solid #2f2c26;color:#e8e4d9;padding:8px 18px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;">Cancel</button>
+      <button onclick="saveSettings()" style="background:#c9a84c;border:none;color:#0f0e0c;padding:8px 22px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:600;">Save</button>
+    </div>
+  </div>
+</div>
+
+</body>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.2rem;color:#e8e4d9;">Settings</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;margin-top:2px;letter-spacing:.08em;">VOICE &amp; PLAN</div>
+      </div>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#7a7568;font-size:1.4rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+
+    <!-- Plan selector -->
+    <div style="margin-bottom:22px;">
+      <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Choose Plan</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+        <div id="plan-free-card" onclick="selectPlan('free')" style="border:2px solid #c9a84c;background:#211f1a;border-radius:12px;padding:16px;cursor:pointer;transition:all .15s;">
+          <div style="font-size:1.3rem;margin-bottom:6px;">🎙️</div>
+          <div style="font-weight:600;color:#e8e4d9;font-size:.9rem;margin-bottom:4px;">Free</div>
+          <div style="font-size:.7rem;color:#7a7568;line-height:1.5;">Standard voice<br/>50K chars/month free<br/>No payment needed</div>
+          <div id="plan-free-badge" style="margin-top:8px;font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;">✓ ACTIVE</div>
+        </div>
+
+        <div id="plan-premium-card" onclick="selectPlan('premium')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:12px;padding:16px;cursor:pointer;transition:all .15s;">
+          <div style="font-size:1.3rem;margin-bottom:6px;">🌟</div>
+          <div style="font-weight:600;color:#e8e4d9;font-size:.9rem;margin-bottom:4px;">Premium</div>
+          <div style="font-size:.7rem;color:#7a7568;line-height:1.5;">AWS Polly Neural<br/>Studio-quality voice<br/>Buy character packs</div>
+          <div id="plan-premium-badge" style="margin-top:8px;font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;">BUY CREDITS</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Free settings -->
+    <div id="free-settings">
+      <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Voice Options</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.68rem;color:#7a7568;margin-bottom:4px;">Voice</div>
+          <select id="free-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:6px 8px;border-radius:8px;font-family:inherit;font-size:.75rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
+            <optgroup label="🇺🇸 American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
+            <optgroup label="🇦🇺 Australian"><option value="Australian Female">Australian Female</option></optgroup>
+            <optgroup label="🇮🇳 Indian"><option value="Indian English Female">Indian Female</option></optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.68rem;color:#7a7568;margin-bottom:4px;">Speed — <span id="free-spd-lbl">0.9×</span></div>
+          <input type="range" id="free-speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"
+            oninput="document.getElementById('free-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+      <button onclick="testFreeVoice()" style="background:#211f1a;border:1px solid #2f2c26;color:#c9a84c;padding:7px 16px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.75rem;">🔊 Test Voice</button>
+      <!-- Credits info -->
+      <div id="free-credits-info" style="margin-top:14px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;padding:12px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#7a7568;">
+          Your free quota: <span id="free-used-display" style="color:#c9a84c;">Loading…</span>
+        </div>
+        <div style="width:100%;height:2px;background:#2f2c26;border-radius:2px;margin-top:8px;">
+          <div id="free-quota-bar" style="height:2px;background:#c9a84c;border-radius:2px;width:0%;transition:width .3s;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Premium settings -->
+    <div id="premium-settings" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Premium Voice (AWS Polly Neural)</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.68rem;color:#7a7568;margin-bottom:4px;">Neural Voice</div>
+          <select id="polly-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:6px 8px;border-radius:8px;font-family:inherit;font-size:.75rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British Neural">
+              <option value="Amy|neural">Amy ♀</option>
+              <option value="Brian|neural">Brian ♂</option>
+              <option value="Emma|neural">Emma ♀</option>
+            </optgroup>
+            <optgroup label="🇺🇸 American Neural">
+              <option value="Joanna|neural">Joanna ♀</option>
+              <option value="Matthew|neural">Matthew ♂</option>
+              <option value="Ruth|neural">Ruth ♀</option>
+              <option value="Stephen|neural">Stephen ♂</option>
+            </optgroup>
+            <optgroup label="🇦🇺 Australian Neural">
+              <option value="Olivia|neural">Olivia ♀</option>
+            </optgroup>
+            <optgroup label="🇮🇳 Indian Neural">
+              <option value="Kajal|neural">Kajal ♀</option>
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.68rem;color:#7a7568;margin-bottom:4px;">Speed — <span id="polly-spd-lbl">0.9×</span></div>
+          <input type="range" id="polly-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
+            oninput="document.getElementById('polly-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+
+      <!-- Credits balance -->
+      <div style="background:#0f0e0c;border:1px solid #2f2c26;border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Your Credits</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
+          <span id="paid-credits-display" style="font-size:1.5rem;font-weight:700;font-family:'DM Mono',monospace;color:#c9a84c;">—</span>
+          <span style="font-size:.72rem;color:#7a7568;">characters remaining</span>
+        </div>
+        <div id="paid-pages-display" style="font-family:'DM Mono',monospace;font-size:.62rem;color:#7a7568;">≈ — pages of reading left</div>
+      </div>
+
+      <!-- Buy packs -->
+      <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Buy Character Credits</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;" id="packs-container">
+        <!-- Populated by JS -->
+      </div>
+      <div id="payment-status" style="font-family:'DM Mono',monospace;font-size:.65rem;min-height:16px;"></div>
+    </div>
+
+    <div style="margin-top:22px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeSettings()" style="background:#211f1a;border:1px solid #2f2c26;color:#e8e4d9;padding:9px 20px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.8rem;">Cancel</button>
+      <button onclick="saveSettings()" style="background:#c9a84c;border:none;color:#0f0e0c;padding:9px 24px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.8rem;font-weight:600;">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+</body>
