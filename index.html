@@ -498,6 +498,165 @@ body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   </footer>
 </div>
 
+<!-- ═══ SETTINGS MODAL ═══ -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#181613;border:1px solid #2f2c26;border-radius:18px;width:100%;max-width:500px;max-height:92vh;overflow-y:auto;padding:26px 24px;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.15rem;color:#e8e4d9;">Voice Settings</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;margin-top:2px;letter-spacing:.08em;">CHOOSE HOW YOU WANT TO LISTEN</div>
+      </div>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#7a7568;font-size:1.5rem;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+    </div>
+
+    <!-- ── 3 PLAN CARDS ── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+
+      <div id="pc-free" onclick="selectPlan('free')" style="border:2px solid #c9a84c;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🎙️</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Free</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Browser TTS<br/>Unlimited · Free</div>
+        <div id="pb-free" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#c9a84c;">✓ ACTIVE</div>
+      </div>
+
+      <div id="pc-ownkey" onclick="selectPlan('ownkey')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🔑</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Own Keys</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Your AWS keys<br/>Neural quality</div>
+        <div id="pb-ownkey" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">ENTER KEYS</div>
+      </div>
+
+      <div id="pc-pay" onclick="selectPlan('pay')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
+        <div style="font-size:1.4rem;margin-bottom:4px;">🌟</div>
+        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Premium</div>
+        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Our server<br/>Buy credits</div>
+        <div id="pb-pay" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">BUY CREDITS</div>
+      </div>
+
+    </div>
+
+    <!-- ── FREE PANEL ── -->
+    <div id="panel-free">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Voice &amp; Speed</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Voice</div>
+          <select id="free-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:6px 8px;border-radius:8px;font-family:inherit;font-size:.72rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
+            <optgroup label="🇺🇸 American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
+            <optgroup label="🇦🇺 Australian"><option value="Australian Female">Australian Female</option></optgroup>
+            <optgroup label="🇮🇳 Indian"><option value="Indian English Female">Indian Female</option></optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Speed — <span id="free-spd-lbl">0.9×</span></div>
+          <input type="range" id="free-speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"
+            oninput="document.getElementById('free-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+      <button onclick="testFreeVoice()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
+      <div style="margin-top:12px;padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:#4caf7a;">✓ Unlimited — uses your browser's built-in speech engine, no server needed.</div>
+      </div>
+    </div>
+
+    <!-- ── OWN KEYS PANEL ── -->
+    <div id="panel-ownkey" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Your AWS Polly Keys</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Access Key ID</div>
+          <input id="ownkey-key" type="password" placeholder="AKIAIOSFODNN7EXAMPLE"
+            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Secret Access Key</div>
+          <input id="ownkey-secret" type="password" placeholder="wJalrXUtnFEMI/K7MDENG…"
+            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Region</div>
+            <select id="ownkey-region" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+              <option value="ap-south-1">ap-south-1 (Mumbai) ★</option>
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
+            <select id="ownkey-voice" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+              <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
+              <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option><option value="Stephen|neural">Stephen ♂</option></optgroup>
+              <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
+              <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
+              <optgroup label="🇮🇳 Standard"><option value="Aditi|standard">Aditi ♀</option><option value="Raveena|standard">Raveena ♀</option></optgroup>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="ownkey-spd-lbl">0.9×</span></div>
+          <input type="range" id="ownkey-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
+            oninput="document.getElementById('ownkey-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <button onclick="testOwnKey()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
+        <button onclick="verifyOwnKey()" style="background:#0f0e0c;border:1px solid #c9a84c;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">✓ Verify Keys</button>
+      </div>
+      <div id="ownkey-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;margin-bottom:8px;"></div>
+      <div style="padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;font-size:.65rem;color:#7a7568;line-height:1.6;">
+        <b style="color:#e8e4d9;">Keys stored only in your browser</b> — sent directly to AWS, never to our server.<br/>
+        Create an IAM user with only <code style="color:#c9a84c;">polly:SynthesizeSpeech</code> permission.<br/>
+        Cost: Neural ~$16/1M chars, Standard ~$4/1M chars.
+      </div>
+    </div>
+
+    <!-- ── PAY US PANEL ── -->
+    <div id="panel-pay" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Premium — AWS Polly via Our Server</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
+          <select id="polly-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
+            <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
+            <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option></optgroup>
+            <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
+            <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="polly-spd-lbl">0.9×</span></div>
+          <input type="range" id="polly-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
+            oninput="document.getElementById('polly-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
+            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
+        </div>
+      </div>
+      <div style="background:#0f0e0c;border:1px solid #2f2c26;border-radius:10px;padding:12px;margin-bottom:12px;">
+        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Your Credits</div>
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span id="paid-credits-display" style="font-size:1.4rem;font-weight:700;font-family:'DM Mono',monospace;color:#c9a84c;">—</span>
+          <span style="font-size:.7rem;color:#7a7568;">characters · ≈<span id="paid-pages-display">—</span> pages left</span>
+        </div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">Buy Credits</div>
+      <div id="packs-container" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;"></div>
+      <div id="payment-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;"></div>
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeSettings()" style="background:#211f1a;border:1px solid #2f2c26;color:#e8e4d9;padding:8px 18px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;">Cancel</button>
+      <button onclick="saveSettings()" style="background:#c9a84c;border:none;color:#0f0e0c;padding:8px 22px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:600;">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -1517,170 +1676,19 @@ document.addEventListener('keydown', e=>{
 
 /* ═══ INIT ════════════════════════════════════════════════════════════════ */
 (async () => {
-  await DB.init();
-  USER_ID = await getUserId();
-  await loadSettings();
-  bindFileInputs();
-  showLibrary();
+  try {
+    await DB.init();
+    USER_ID = await getUserId();
+    await loadSettings();
+    bindFileInputs();
+    showLibrary();
+    if (CFG.plan !== 'free') fetchCredits();
+  } catch(e) {
+    console.error('Init failed:', e);
+    // Even if init fails, try to show the library so user can at least see the UI
+    document.getElementById('library-screen').classList.remove('hidden');
+    bindFileInputs();
+  }
 })();
 </script>
-<!-- ═══ SETTINGS MODAL ═══ -->
-<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#181613;border:1px solid #2f2c26;border-radius:18px;width:100%;max-width:500px;max-height:92vh;overflow-y:auto;padding:26px 24px;">
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
-      <div>
-        <div style="font-family:'Playfair Display',serif;font-size:1.15rem;color:#e8e4d9;">Voice Settings</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;margin-top:2px;letter-spacing:.08em;">CHOOSE HOW YOU WANT TO LISTEN</div>
-      </div>
-      <button onclick="closeSettings()" style="background:none;border:none;color:#7a7568;font-size:1.5rem;cursor:pointer;line-height:1;padding:0 4px;">×</button>
-    </div>
-
-    <!-- ── 3 PLAN CARDS ── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
-
-      <div id="pc-free" onclick="selectPlan('free')" style="border:2px solid #c9a84c;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
-        <div style="font-size:1.4rem;margin-bottom:4px;">🎙️</div>
-        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Free</div>
-        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Browser TTS<br/>Unlimited · Free</div>
-        <div id="pb-free" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#c9a84c;">✓ ACTIVE</div>
-      </div>
-
-      <div id="pc-ownkey" onclick="selectPlan('ownkey')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
-        <div style="font-size:1.4rem;margin-bottom:4px;">🔑</div>
-        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Own Keys</div>
-        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Your AWS keys<br/>Neural quality</div>
-        <div id="pb-ownkey" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">ENTER KEYS</div>
-      </div>
-
-      <div id="pc-pay" onclick="selectPlan('pay')" style="border:1px solid #2f2c26;background:#211f1a;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all .15s;text-align:center;">
-        <div style="font-size:1.4rem;margin-bottom:4px;">🌟</div>
-        <div style="font-weight:600;color:#e8e4d9;font-size:.8rem;margin-bottom:3px;">Premium</div>
-        <div style="font-size:.62rem;color:#7a7568;line-height:1.4;">Our server<br/>Buy credits</div>
-        <div id="pb-pay" style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.55rem;color:#7a7568;">BUY CREDITS</div>
-      </div>
-
-    </div>
-
-    <!-- ── FREE PANEL ── -->
-    <div id="panel-free">
-      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Voice &amp; Speed</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Voice</div>
-          <select id="free-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:6px 8px;border-radius:8px;font-family:inherit;font-size:.72rem;cursor:pointer;">
-            <optgroup label="🇬🇧 British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
-            <optgroup label="🇺🇸 American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
-            <optgroup label="🇦🇺 Australian"><option value="Australian Female">Australian Female</option></optgroup>
-            <optgroup label="🇮🇳 Indian"><option value="Indian English Female">Indian Female</option></optgroup>
-          </select>
-        </div>
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:4px;">Speed — <span id="free-spd-lbl">0.9×</span></div>
-          <input type="range" id="free-speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"
-            oninput="document.getElementById('free-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
-            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
-        </div>
-      </div>
-      <button onclick="testFreeVoice()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
-      <div style="margin-top:12px;padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;">
-        <div style="font-family:'DM Mono',monospace;font-size:.62rem;color:#4caf7a;">✓ Unlimited — uses your browser's built-in speech engine, no server needed.</div>
-      </div>
-    </div>
-
-    <!-- ── OWN KEYS PANEL ── -->
-    <div id="panel-ownkey" style="display:none;">
-      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Your AWS Polly Keys</div>
-      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px;">
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Access Key ID</div>
-          <input id="ownkey-key" type="password" placeholder="AKIAIOSFODNN7EXAMPLE"
-            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
-        </div>
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">AWS Secret Access Key</div>
-          <input id="ownkey-secret" type="password" placeholder="wJalrXUtnFEMI/K7MDENG…"
-            style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:.72rem;outline:none;"/>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Region</div>
-            <select id="ownkey-region" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
-              <option value="ap-south-1">ap-south-1 (Mumbai) ★</option>
-              <option value="us-east-1">us-east-1 (N. Virginia)</option>
-              <option value="us-west-2">us-west-2 (Oregon)</option>
-              <option value="eu-west-1">eu-west-1 (Ireland)</option>
-              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
-              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
-            </select>
-          </div>
-          <div>
-            <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
-            <select id="ownkey-voice" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
-              <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
-              <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option><option value="Stephen|neural">Stephen ♂</option></optgroup>
-              <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
-              <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
-              <optgroup label="🇮🇳 Standard"><option value="Aditi|standard">Aditi ♀</option><option value="Raveena|standard">Raveena ♀</option></optgroup>
-            </select>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="ownkey-spd-lbl">0.9×</span></div>
-          <input type="range" id="ownkey-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
-            oninput="document.getElementById('ownkey-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
-            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;"/>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-        <button onclick="testOwnKey()" style="background:#0f0e0c;border:1px solid #2f2c26;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">🔊 Test Voice</button>
-        <button onclick="verifyOwnKey()" style="background:#0f0e0c;border:1px solid #c9a84c;color:#c9a84c;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.72rem;">✓ Verify Keys</button>
-      </div>
-      <div id="ownkey-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;margin-bottom:8px;"></div>
-      <div style="padding:10px 12px;background:#0f0e0c;border:1px solid #2f2c26;border-radius:8px;font-size:.65rem;color:#7a7568;line-height:1.6;">
-        <b style="color:#e8e4d9;">Keys stored only in your browser</b> — sent directly to AWS, never to our server.<br/>
-        Create an IAM user with only <code style="color:#c9a84c;">polly:SynthesizeSpeech</code> permission.<br/>
-        Cost: Neural ~$16/1M chars, Standard ~$4/1M chars.
-      </div>
-    </div>
-
-    <!-- ── PAY US PANEL ── -->
-    <div id="panel-pay" style="display:none;">
-      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#c9a84c;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Premium — AWS Polly via Our Server</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Neural Voice</div>
-          <select id="polly-voice-sel" style="width:100%;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.7rem;cursor:pointer;">
-            <optgroup label="🇬🇧 British"><option value="Amy|neural">Amy ♀</option><option value="Brian|neural">Brian ♂</option><option value="Emma|neural">Emma ♀</option></optgroup>
-            <optgroup label="🇺🇸 American"><option value="Joanna|neural">Joanna ♀</option><option value="Matthew|neural">Matthew ♂</option><option value="Ruth|neural">Ruth ♀</option></optgroup>
-            <optgroup label="🇦🇺 Australian"><option value="Olivia|neural">Olivia ♀</option></optgroup>
-            <optgroup label="🇮🇳 Indian"><option value="Kajal|neural">Kajal ♀</option></optgroup>
-          </select>
-        </div>
-        <div>
-          <div style="font-size:.66rem;color:#7a7568;margin-bottom:3px;">Speed — <span id="polly-spd-lbl">0.9×</span></div>
-          <input type="range" id="polly-speed-sl" min="0.5" max="1.5" step="0.1" value="0.9"
-            oninput="document.getElementById('polly-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"
-            style="-webkit-appearance:none;width:100%;height:3px;background:#2f2c26;border-radius:2px;outline:none;cursor:pointer;margin-top:10px;"/>
-        </div>
-      </div>
-      <div style="background:#0f0e0c;border:1px solid #2f2c26;border-radius:10px;padding:12px;margin-bottom:12px;">
-        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Your Credits</div>
-        <div style="display:flex;align-items:baseline;gap:8px;">
-          <span id="paid-credits-display" style="font-size:1.4rem;font-weight:700;font-family:'DM Mono',monospace;color:#c9a84c;">—</span>
-          <span style="font-size:.7rem;color:#7a7568;">characters · ≈<span id="paid-pages-display">—</span> pages left</span>
-        </div>
-      </div>
-      <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:#7a7568;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">Buy Credits</div>
-      <div id="packs-container" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;"></div>
-      <div id="payment-status" style="font-family:'DM Mono',monospace;font-size:.62rem;min-height:14px;"></div>
-    </div>
-
-    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;">
-      <button onclick="closeSettings()" style="background:#211f1a;border:1px solid #2f2c26;color:#e8e4d9;padding:8px 18px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;">Cancel</button>
-      <button onclick="saveSettings()" style="background:#c9a84c;border:none;color:#0f0e0c;padding:8px 22px;border-radius:var(--r);cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:600;">Save</button>
-    </div>
-  </div>
-</div>
-
 </body>
