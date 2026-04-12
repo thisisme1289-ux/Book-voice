@@ -1,0 +1,2470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0c0b09"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Legible"/>
+<title>Legible — PDF Reader</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script>
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ══════════════════════════════════════════════════════
+   DESIGN TOKENS
+══════════════════════════════════════════════════════ */
+:root {
+  /* Backgrounds */
+  --bg:       #0c0b09;
+  --surf:     #131210;
+  --card:     #1a1816;
+  --raised:   #201e1b;
+
+  /* Borders */
+  --line:     #242019;
+  --line2:    #2e2b24;
+
+  /* Gold accent */
+  --gold:     #c4a44a;
+  --gold-h:   #d9bc6a;
+  --gold-dim: rgba(196,164,74,.10);
+  --gold-glow:rgba(196,164,74,.22);
+
+  /* Text */
+  --t1:   #e8e2d6;
+  --t2:   #a8a099;
+  --t3:   #635d57;
+
+  /* Status */
+  --green: #4a9e72;
+  --red:   #b94040;
+
+  /* Layout */
+  --hdr:  52px;
+  --pl:   76px;
+  --sb:   260px;
+  --r:    10px;
+  --r2:   14px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* Type */
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans:  'Inter', system-ui, sans-serif;
+  --mono:  'JetBrains Mono', 'Courier New', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ══ SVG ICON SYSTEM ══════════════════════════════════ */
+.ico { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ico svg { display: block; }
+
+/* ══ SCROLLBARS ══════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--t3); }
+
+/* ══ ANIMATIONS ═════════════════════════════════════ */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ══ VIEWS ══════════════════════════════════════════ */
+#library-screen {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#library-screen.hidden { display: none; }
+
+/* ══════════════════════════════════════════════════════
+   LIBRARY — HEADER
+══════════════════════════════════════════════════════ */
+#lib-hdr {
+  height: var(--hdr);
+  background: var(--surf);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 8px; padding: 0 20px;
+  flex-shrink: 0;
+}
+#lib-logo {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: .01em;
+  flex: 1;
+}
+#lib-logo span { color: var(--t2); font-weight: 400; font-size: .85em; margin-left: 4px; }
+#credits-badge {
+  font-family: var(--mono);
+  font-size: .6rem;
+  color: var(--t3);
+  display: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.hdr-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line2);
+  color: var(--t2);
+  padding: 0 13px; height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--sans); font-size: .75rem; font-weight: 500;
+  transition: border-color .15s, color .15s, background .15s;
+  white-space: nowrap; flex-shrink: 0;
+}
+.hdr-btn:hover { border-color: var(--gold); color: var(--gold); }
+.hdr-btn.primary {
+  background: var(--gold); border-color: var(--gold);
+  color: #0c0b09; font-weight: 600;
+}
+.hdr-btn.primary:hover { background: var(--gold-h); }
+#lib-install { display: none; }
+#lib-install.show { display: inline-flex; }
+#lib-file { display: none; }
+
+/* ══════════════════════════════════════════════════════
+   LIBRARY — BODY
+══════════════════════════════════════════════════════ */
+#lib-body {
+  flex: 1; overflow-y: auto;
+  padding: 32px 24px 48px;
+  max-width: 960px; width: 100%; margin: 0 auto;
+}
+
+/* ── HERO WIDGET ── */
+#hero {
+  background: linear-gradient(135deg, #181512 0%, #1e1b16 55%, #141210 100%);
+  border: 1px solid var(--line2);
+  border-radius: var(--r2);
+  padding: 28px 32px;
+  margin-bottom: 40px;
+  display: flex; align-items: center; gap: 28px;
+  cursor: pointer;
+  transition: border-color .2s, box-shadow .2s;
+  position: relative; overflow: hidden;
+  animation: fadeIn .3s ease;
+}
+#hero::after {
+  content: '';
+  position: absolute; top: -60px; right: -60px;
+  width: 220px; height: 220px; border-radius: 50%;
+  background: radial-gradient(circle, var(--gold-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+#hero:hover { border-color: rgba(196,164,74,.3); box-shadow: 0 8px 48px rgba(0,0,0,.5); }
+#hero.hidden { display: none; }
+#hero-icon {
+  width: 52px; height: 64px; flex-shrink: 0;
+  background: var(--raised); border: 1px solid var(--line2);
+  border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  color: var(--gold);
+}
+#hero-body { flex: 1; min-width: 0; }
+#hero-label {
+  font-family: var(--mono); font-size: .58rem;
+  color: var(--gold); letter-spacing: .14em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+#hero-title {
+  font-family: var(--serif); font-size: 1.3rem; font-weight: 700;
+  color: var(--t1); margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#hero-meta {
+  font-family: var(--mono); font-size: .6rem;
+  color: var(--t3); margin-bottom: 14px;
+}
+#hero-bar-wrap {
+  width: 100%; height: 2px; background: var(--line2);
+  border-radius: 2px; margin-bottom: 6px;
+}
+#hero-bar { height: 2px; background: var(--gold); border-radius: 2px; transition: width .4s; }
+#hero-pct { font-family: var(--mono); font-size: .58rem; color: var(--gold); }
+#hero-play {
+  flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%;
+  background: var(--gold); border: none; color: #0c0b09;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 24px var(--gold-glow);
+  transition: background .15s, transform .15s, box-shadow .15s;
+  position: relative; z-index: 1;
+}
+#hero-play:hover { background: var(--gold-h); transform: scale(1.06); box-shadow: 0 6px 32px var(--gold-glow); }
+
+/* ── SECTION HEADER ── */
+#lib-section-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.lib-section-label {
+  font-family: var(--mono); font-size: .58rem;
+  color: var(--t3); letter-spacing: .12em; text-transform: uppercase;
+}
+#lib-count { color: var(--t3); }
+
+/* ── BOOK GRID ── */
+#lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 14px;
+}
+.book-card {
+  background: var(--surf); border: 1px solid var(--line);
+  border-radius: var(--r2); padding: 0;
+  cursor: pointer; transition: border-color .18s, box-shadow .18s, transform .18s;
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+  animation: fadeIn .25s ease;
+}
+.book-card:hover {
+  border-color: rgba(196,164,74,.3);
+  box-shadow: 0 6px 32px rgba(0,0,0,.4);
+  transform: translateY(-2px);
+}
+.bc-cover {
+  height: 90px; background: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--t3); position: relative;
+  border-bottom: 1px solid var(--line);
+}
+.bc-spine {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 4px; background: var(--gold); opacity: .6;
+}
+.bc-body { padding: 14px 14px 12px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.bc-title {
+  font-family: var(--serif); font-size: .85rem; font-weight: 600;
+  color: var(--t1); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.bc-meta { font-family: var(--mono); font-size: .56rem; color: var(--t3); }
+.bc-bar-wrap { width: 100%; height: 2px; background: var(--line); border-radius: 2px; margin-top: auto; }
+.bc-bar { height: 2px; background: var(--gold); border-radius: 2px; transition: width .3s; }
+.bc-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px 12px;
+}
+.bc-pct { font-family: var(--mono); font-size: .56rem; color: var(--gold); }
+.bc-del {
+  background: none; border: none; color: var(--t3);
+  cursor: pointer; padding: 4px;
+  border-radius: 6px; transition: color .15s, background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.bc-del:hover { color: var(--red); background: rgba(185,64,64,.1); }
+
+/* ── EMPTY STATE ── */
+#lib-empty {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; text-align: center; padding: 80px 24px;
+}
+#lib-empty.hidden { display: none; }
+.le-icon {
+  width: 72px; height: 72px;
+  border: 1.5px dashed var(--line2); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--t3);
+}
+.le-h { font-family: var(--serif); font-size: 1.25rem; color: var(--t1); }
+.le-s { font-size: .78rem; color: var(--t3); max-width: 280px; line-height: 1.65; }
+.le-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--gold); color: #0c0b09;
+  border: none; padding: 10px 28px;
+  border-radius: var(--r); cursor: pointer;
+  font-family: var(--sans); font-weight: 600; font-size: .85rem;
+  transition: background .15s;
+}
+.le-btn:hover { background: var(--gold-h); }
+
+/* ── STORAGE BAR ── */
+#storage-bar {
+  margin-top: 32px; padding: 10px 14px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: var(--mono); font-size: .58rem; color: var(--t3);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+#storage-bar.hidden { display: none; }
+
+/* ── INFO CARDS ── */
+#widget-info {
+  margin-top: 24px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r2); padding: 20px 22px;
+}
+.wi-label {
+  font-family: var(--mono); font-size: .56rem; color: var(--gold);
+  letter-spacing: .12em; text-transform: uppercase; margin-bottom: 14px;
+}
+.wi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wi-card {
+  background: var(--surf); border: 1px solid var(--line);
+  border-radius: 8px; padding: 14px;
+}
+.wi-card-title {
+  font-size: .8rem; font-weight: 600; color: var(--t1); margin-bottom: 5px;
+}
+.wi-card-body { font-size: .7rem; color: var(--t3); line-height: 1.6; }
+
+/* ══════════════════════════════════════════════════════
+   READER SHELL
+══════════════════════════════════════════════════════ */
+#shell {
+  display: none;
+  grid-template-areas: "hdr hdr" "sb  rd" "pl  pl";
+  grid-template-rows: var(--hdr) 1fr var(--pl);
+  grid-template-columns: var(--sb) 1fr;
+  height: 100vh; height: 100dvh;
+}
+
+/* ── READER HEADER ── */
+#hdr {
+  grid-area: hdr;
+  background: var(--surf); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 6px; padding: 0 16px;
+}
+#sb-tog {
+  display: none; background: none; border: none;
+  color: var(--t3); cursor: pointer;
+  padding: 6px; border-radius: 6px;
+  transition: color .15s;
+}
+#sb-tog:hover { color: var(--t1); }
+#logo {
+  font-family: var(--serif); font-size: 1rem; font-weight: 600;
+  color: var(--gold); flex-shrink: 0;
+}
+#book-ttl {
+  flex: 1; font-size: .72rem; color: var(--t3);
+  font-style: italic; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0; padding: 0 8px;
+}
+.rdr-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--card); border: 1px solid var(--line2);
+  color: var(--t2); padding: 0 11px; height: 30px;
+  border-radius: 7px; cursor: pointer;
+  font-family: var(--sans); font-size: .72rem; font-weight: 500;
+  transition: border-color .15s, color .15s;
+  white-space: nowrap; flex-shrink: 0;
+}
+.rdr-btn:hover { border-color: var(--gold); color: var(--gold); }
+.rdr-btn.accent { color: var(--gold); border-color: rgba(196,164,74,.25); }
+#install-btn { display: none; }
+#install-btn.show { display: inline-flex; }
+#file-input { display: none; }
+
+/* ── SIDEBAR ── */
+#sb {
+  grid-area: sb;
+  background: var(--surf); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: transform .24s cubic-bezier(.4,0,.2,1);
+}
+#sb-hd {
+  padding: 12px 16px;
+  font-family: var(--mono); font-size: .58rem; color: var(--t3);
+  letter-spacing: .12em; text-transform: uppercase;
+  border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+#sb-stats {
+  padding: 8px 16px 6px;
+  font-family: var(--mono); font-size: .58rem; color: var(--t3);
+  border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+#ch-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.chi {
+  padding: 10px 16px; cursor: pointer;
+  font-size: .77rem; color: var(--t3);
+  border-left: 2px solid transparent;
+  transition: color .12s, background .12s, border-color .12s;
+  line-height: 1.35;
+}
+.chi:hover { color: var(--t1); background: var(--card); }
+.chi.active { color: var(--gold); border-left-color: var(--gold); background: var(--gold-dim); }
+.chin {
+  display: block; font-family: var(--mono);
+  font-size: .56rem; color: var(--t3); margin-bottom: 2px;
+}
+
+/* ── READER AREA ── */
+#rd {
+  grid-area: rd; overflow-y: auto;
+  background: var(--bg); position: relative;
+  -webkit-overflow-scrolling: touch;
+}
+#rd-inner {
+  max-width: 680px; margin: 0 auto;
+  padding: 44px 28px 72px;
+}
+#loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+#loading.hidden { display: none; }
+.spin { width: 28px; height: 28px; border: 2px solid var(--line2); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
+#ld-txt { font-family: var(--mono); font-size: .72rem; color: var(--t3); }
+#ld-pct { font-family: var(--mono); font-size: 1.5rem; font-weight: 500; color: var(--gold); min-height: 2rem; }
+#book-cnt { display: none; }
+#book-cnt.vis { display: block; }
+#ch-title {
+  font-family: var(--serif); font-size: 1.55rem; font-weight: 700;
+  line-height: 1.2; margin-bottom: 6px; color: var(--t1);
+}
+#ch-meta {
+  font-family: var(--mono); font-size: .58rem; color: var(--t3);
+  margin-bottom: 32px; letter-spacing: .06em; text-transform: uppercase;
+}
+.para {
+  font-size: .97rem; line-height: 1.92; color: var(--t2);
+  margin-bottom: 1.3em; padding: 8px 12px;
+  border-left: 2px solid transparent; border-radius: 4px;
+  transition: all .2s; cursor: pointer; user-select: none;
+}
+.para:hover { background: var(--card); color: var(--t1); }
+.para.reading {
+  background: var(--gold-dim); border-left-color: var(--gold);
+  color: var(--t1);
+}
+.para.done { color: var(--t3); }
+
+/* ── BG SCAN BADGE ── */
+#bg-scan-badge {
+  display: none;
+  position: fixed; top: calc(var(--hdr) + 10px); right: 14px; z-index: 290;
+  background: var(--surf); border: 1px solid var(--gold);
+  border-radius: 20px; padding: 5px 12px 5px 10px;
+  font-family: var(--mono); font-size: .6rem; color: var(--gold);
+  box-shadow: 0 2px 16px rgba(0,0,0,.5);
+  pointer-events: none;
+  display: none;
+  align-items: center; gap: 7px;
+}
+#bg-scan-badge.active { display: flex; }
+#bg-scan-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold); animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════
+   PLAYER BAR
+══════════════════════════════════════════════════════ */
+#pl {
+  grid-area: pl;
+  background: var(--surf); border-top: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding-bottom: var(--safe-b);
+}
+#scrub-wrap {
+  height: 2px; background: var(--line); position: relative;
+  cursor: pointer; flex-shrink: 0;
+  transition: height .15s;
+}
+#scrub-wrap:hover { height: 4px; }
+#scrub-fill {
+  height: 100%; background: var(--gold); width: 0%;
+  transition: width .4s linear; pointer-events: none;
+}
+#pl-row {
+  flex: 1;
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; padding: 0 18px; gap: 16px; min-width: 0;
+}
+
+/* Player info */
+#pl-info { min-width: 0; }
+#pl-now {
+  font-family: var(--serif); font-style: italic;
+  font-size: .82rem; color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#pl-det { font-family: var(--mono); font-size: .56rem; color: var(--t3); margin-top: 2px; }
+#pl-stat { font-family: var(--mono); font-size: .54rem; color: var(--gold); height: 8px; margin-top: 3px; }
+
+/* Controls */
+#pl-ctrl { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ctrl-btn {
+  background: none; border: none;
+  color: var(--t3); border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: color .15s, background .15s;
+  width: 36px; height: 36px; flex-shrink: 0;
+}
+.ctrl-btn:hover { color: var(--t1); background: var(--card); }
+.ctrl-btn:active { transform: scale(.93); }
+#play-btn {
+  width: 48px; height: 48px;
+  background: var(--gold); border-radius: 50%;
+  color: #0c0b09;
+  box-shadow: 0 2px 20px var(--gold-glow);
+  transition: background .15s, transform .15s, box-shadow .15s;
+}
+#play-btn:hover {
+  background: var(--gold-h); color: #0c0b09;
+  transform: scale(1.05);
+  box-shadow: 0 4px 28px var(--gold-glow);
+}
+#play-btn:active { transform: scale(.95); }
+
+/* Right side settings */
+#pl-set { display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 0; }
+.sg { display: flex; flex-direction: column; gap: 3px; }
+.sl {
+  font-family: var(--mono); font-size: .52rem; color: var(--t3);
+  text-transform: uppercase; letter-spacing: .09em;
+}
+#voice-sel {
+  background: var(--card); border: 1px solid var(--line2);
+  color: var(--t1); padding: 4px 8px;
+  border-radius: 7px; font-family: var(--sans); font-size: .72rem;
+  cursor: pointer; width: 144px; outline: none;
+  transition: border-color .15s;
+}
+#voice-sel:focus { border-color: var(--gold); }
+.spd-row { display: flex; align-items: center; gap: 8px; }
+#speed-sl {
+  -webkit-appearance: none; width: 84px; height: 2px;
+  background: var(--line2); border-radius: 2px; outline: none; cursor: pointer;
+}
+#speed-sl::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--gold); cursor: pointer;
+  box-shadow: 0 0 0 3px var(--gold-dim);
+  transition: box-shadow .15s;
+}
+#speed-sl::-webkit-slider-thumb:hover { box-shadow: 0 0 0 5px var(--gold-dim); }
+#spd-val { font-family: var(--mono); font-size: .66rem; color: var(--gold); min-width: 30px; }
+#test-voice-btn {
+  background: var(--card); border: 1px solid var(--line2);
+  color: var(--gold); border-radius: 6px; cursor: pointer;
+  padding: 4px 9px; font-size: .7rem; white-space: nowrap;
+  flex-shrink: 0; font-family: var(--sans);
+  display: flex; align-items: center; gap: 5px;
+  transition: border-color .15s, background .15s;
+}
+#test-voice-btn:hover { border-color: var(--gold); background: var(--gold-dim); }
+
+/* ══════════════════════════════════════════════════════
+   OVERLAY & SIDEBAR MOBILE
+══════════════════════════════════════════════════════ */
+#overlay {
+  display: none; position: fixed; inset: 0;
+  z-index: 99; background: rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+}
+#overlay.vis { display: block; }
+
+/* ══════════════════════════════════════════════════════
+   LOAD OVERLAY
+══════════════════════════════════════════════════════ */
+#load-overlay {
+  display: none; position: fixed; inset: 0; z-index: 999;
+  background: var(--bg);
+  flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+}
+#load-overlay .spin { width: 36px; height: 36px; border-width: 2.5px; }
+#load-txt {
+  font-family: var(--mono); font-size: .76rem; color: var(--t3);
+}
+#load-pct {
+  font-family: var(--mono); font-size: 2rem; font-weight: 500;
+  color: var(--gold); min-height: 2.5rem; letter-spacing: -.02em;
+}
+#load-ocr { display: none; width: 260px; max-width: 85vw; }
+.load-ocr-hd {
+  display: flex; justify-content: space-between; margin-bottom: 8px;
+}
+.load-ocr-label {
+  font-family: var(--mono); font-size: .58rem;
+  color: var(--gold); letter-spacing: .1em; text-transform: uppercase;
+}
+#load-ocr-conf { font-family: var(--mono); font-size: .58rem; color: var(--t3); }
+.load-ocr-track {
+  width: 100%; height: 2px; background: var(--line2); border-radius: 2px;
+}
+#load-ocr-bar {
+  height: 2px; background: var(--gold); border-radius: 2px;
+  width: 0%; transition: width .2s;
+}
+#load-ocr-detail {
+  font-family: var(--mono); font-size: .56rem; color: var(--t3);
+  margin-top: 6px; text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════
+   DELETE CONFIRM
+══════════════════════════════════════════════════════ */
+#del-confirm {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.75); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+#del-confirm.show { display: flex; }
+#del-box {
+  background: var(--surf); border: 1px solid var(--line2);
+  border-radius: var(--r2); padding: 32px 28px;
+  max-width: 340px; width: 90%; text-align: center;
+  animation: fadeIn .2s ease;
+}
+#del-box h3 { font-family: var(--serif); font-size: 1.1rem; margin-bottom: 10px; color: var(--t1); }
+#del-name { color: var(--gold); font-family: var(--serif); font-size: .95rem; margin-bottom: 10px; }
+#del-box p { font-size: .78rem; color: var(--t3); margin-bottom: 24px; line-height: 1.6; }
+.del-btns { display: flex; gap: 10px; justify-content: center; }
+.del-btns button {
+  padding: 9px 24px; border-radius: var(--r);
+  cursor: pointer; font-family: var(--sans); font-size: .82rem; font-weight: 500;
+}
+#del-cancel {
+  background: var(--card); border: 1px solid var(--line2); color: var(--t1);
+  transition: border-color .15s;
+}
+#del-cancel:hover { border-color: var(--gold); }
+#del-confirm-btn {
+  background: var(--red); border: 1px solid var(--red); color: #fff;
+  transition: background .15s;
+}
+#del-confirm-btn:hover { background: #d44; }
+
+/* ══════════════════════════════════════════════════════
+   SETTINGS MODAL
+══════════════════════════════════════════════════════ */
+#settings-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.8); backdrop-filter: blur(8px);
+  align-items: center; justify-content: center; padding: 16px;
+}
+#settings-modal.open { display: flex; }
+.sm-box {
+  background: var(--surf); border: 1px solid var(--line2);
+  border-radius: 18px; width: 100%; max-width: 500px;
+  max-height: 92vh; overflow-y: auto; padding: 28px 26px;
+  animation: fadeIn .2s ease;
+}
+.sm-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.sm-hdr-text .sm-title {
+  font-family: var(--serif); font-size: 1.1rem; color: var(--t1);
+}
+.sm-hdr-text .sm-sub {
+  font-family: var(--mono); font-size: .56rem; color: var(--t3);
+  margin-top: 3px; letter-spacing: .08em; text-transform: uppercase;
+}
+.sm-close {
+  background: var(--card); border: 1px solid var(--line2);
+  color: var(--t3); width: 28px; height: 28px;
+  border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s;
+}
+.sm-close:hover { color: var(--t1); border-color: var(--t3); }
+
+/* Plan cards */
+.plan-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 22px; }
+.plan-card {
+  background: var(--card); border: 1px solid var(--line2);
+  border-radius: 10px; padding: 14px 10px 12px;
+  cursor: pointer; transition: all .15s; text-align: center;
+}
+.plan-card:hover { border-color: var(--gold); }
+.plan-card.active { border: 2px solid var(--gold); }
+.plan-icon { margin-bottom: 6px; color: var(--t3); display: flex; justify-content: center; }
+.plan-card.active .plan-icon { color: var(--gold); }
+.plan-name { font-weight: 600; color: var(--t1); font-size: .8rem; margin-bottom: 3px; }
+.plan-desc { font-size: .6rem; color: var(--t3); line-height: 1.4; }
+.plan-badge {
+  margin-top: 7px; font-family: var(--mono);
+  font-size: .54rem; color: var(--t3);
+}
+.plan-card.active .plan-badge { color: var(--gold); }
+
+/* Settings panels */
+.sm-panel { display: none; }
+.sm-panel.active { display: block; }
+.sm-section {
+  font-family: var(--mono); font-size: .56rem; color: var(--t3);
+  letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px;
+}
+.sm-section.gold { color: var(--gold); }
+.sm-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.sm-field { display: flex; flex-direction: column; gap: 4px; }
+.sm-label { font-size: .64rem; color: var(--t3); }
+.sm-select, .sm-input {
+  background: var(--bg); border: 1px solid var(--line2); color: var(--t1);
+  padding: 7px 10px; border-radius: 8px;
+  font-family: var(--sans); font-size: .72rem; outline: none;
+  width: 100%; transition: border-color .15s;
+}
+.sm-select { cursor: pointer; }
+.sm-select:focus, .sm-input:focus { border-color: var(--gold); }
+.sm-range-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.sm-range {
+  -webkit-appearance: none; flex: 1; height: 2px;
+  background: var(--line2); border-radius: 2px; outline: none; cursor: pointer;
+}
+.sm-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--gold); cursor: pointer;
+}
+.sm-range-val { font-family: var(--mono); font-size: .64rem; color: var(--gold); min-width: 32px; }
+.sm-btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.sm-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); border: 1px solid var(--line2); color: var(--gold);
+  padding: 7px 14px; border-radius: 8px;
+  cursor: pointer; font-family: var(--sans); font-size: .72rem;
+  transition: border-color .15s, background .15s;
+}
+.sm-btn:hover { border-color: var(--gold); background: var(--gold-dim); }
+.sm-btn.primary { background: var(--gold); color: #0c0b09; border-color: var(--gold); }
+.sm-btn.primary:hover { background: var(--gold-h); }
+.sm-status {
+  font-family: var(--mono); font-size: .6rem;
+  min-height: 16px; margin-bottom: 8px;
+}
+.sm-info-box {
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 11px 14px;
+  font-size: .66rem; color: var(--t3); line-height: 1.65;
+}
+.sm-info-box b { color: var(--t1); }
+.sm-info-box code { color: var(--gold); font-family: var(--mono); }
+.sm-info-green { color: var(--green); font-family: var(--mono); font-size: .64rem; }
+.sm-credits-box {
+  background: var(--bg); border: 1px solid var(--line2);
+  border-radius: 10px; padding: 14px; margin-bottom: 12px;
+}
+.sm-credits-label {
+  font-family: var(--mono); font-size: .56rem; color: var(--t3);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+}
+.sm-credits-num {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.sm-credits-big {
+  font-size: 1.5rem; font-weight: 600; font-family: var(--mono); color: var(--gold);
+}
+.sm-credits-unit { font-size: .68rem; color: var(--t3); }
+.sm-footer {
+  margin-top: 22px; display: flex; gap: 10px; justify-content: flex-end;
+}
+
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  #shell { grid-template-columns: 0 1fr; }
+  #sb-tog { display: flex; }
+  #sb {
+    position: fixed; top: var(--hdr); left: 0; bottom: var(--pl);
+    width: 280px; z-index: 100;
+    transform: translateX(-104%);
+    box-shadow: 8px 0 40px rgba(0,0,0,.6);
+  }
+  #sb.open { transform: translateX(0); }
+  #lib-grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+}
+@media (max-width: 640px) {
+  :root { --hdr: 48px; --pl: 144px; }
+  #pl-row { grid-template-columns: 1fr auto; grid-template-rows: auto auto; padding: 6px 14px 4px; gap: 6px; }
+  #pl-set { grid-column: 1 / -1; justify-content: space-between; gap: 10px; }
+  #voice-sel { width: 126px; font-size: .68rem; }
+  #speed-sl { width: 72px; }
+  #rd-inner { padding: 24px 16px 64px; }
+  #ch-title { font-size: 1.3rem; }
+  .para { font-size: .92rem; line-height: 1.8; }
+  #play-btn { width: 44px; height: 44px; }
+  .ctrl-btn { width: 32px; height: 32px; }
+  #hero { flex-direction: column; align-items: flex-start; padding: 22px 20px; }
+  #hero-play { position: absolute; top: 20px; right: 20px; width: 46px; height: 46px; }
+  #lib-body { padding: 20px 14px 40px; }
+  #lib-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .wi-grid { grid-template-columns: 1fr; }
+  .plan-grid { gap: 6px; }
+}
+@media (max-width: 400px) {
+  :root { --pl: 156px; }
+  #voice-sel { width: 110px; font-size: .64rem; }
+  #speed-sl { width: 60px; }
+  .ctrl-btn { width: 30px; height: 30px; }
+  #play-btn { width: 42px; height: 42px; }
+  #lib-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ LOAD OVERLAY ══════════════════════════════════════ -->
+<div id="load-overlay">
+  <div class="spin"></div>
+  <div id="load-txt">Reading PDF…</div>
+  <div id="load-pct"></div>
+  <div id="load-ocr">
+    <div class="load-ocr-hd">
+      <span class="load-ocr-label">OCR Mode</span>
+      <span id="load-ocr-conf"></span>
+    </div>
+    <div class="load-ocr-track"><div id="load-ocr-bar"></div></div>
+    <div id="load-ocr-detail"></div>
+  </div>
+</div>
+
+<!-- ══ LIBRARY SCREEN ════════════════════════════════════ -->
+<div id="library-screen">
+  <header id="lib-hdr">
+    <div id="lib-logo">Legible <span>by BookVoice</span></div>
+    <div id="credits-badge"></div>
+    <button id="lib-install" class="hdr-btn primary" onclick="installHandler()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Install
+    </button>
+    <button class="hdr-btn" id="lib-settings-btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </button>
+    <button class="hdr-btn primary" onclick="document.getElementById('lib-file').click()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Book
+    </button>
+    <input type="file" id="lib-file" accept=".pdf"/>
+  </header>
+
+  <div id="lib-body">
+
+    <!-- CONTINUE READING HERO -->
+    <div id="hero" class="hidden" onclick="heroResume()">
+      <div id="hero-icon">
+        <svg width="24" height="28" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="1" width="18" height="26" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+      </div>
+      <div id="hero-body">
+        <div id="hero-label">Continue Reading</div>
+        <div id="hero-title">—</div>
+        <div id="hero-meta">—</div>
+        <div id="hero-bar-wrap"><div id="hero-bar" style="width:0%"></div></div>
+        <div id="hero-pct">0%</div>
+      </div>
+      <button id="hero-play" onclick="event.stopPropagation();heroResume()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+    </div>
+
+    <!-- BOOK GRID -->
+    <div id="lib-section-hdr" style="display:none">
+      <span class="lib-section-label">Your Library</span>
+      <span class="lib-section-label" id="lib-count"></span>
+    </div>
+    <div id="lib-grid"></div>
+
+    <!-- EMPTY STATE -->
+    <div id="lib-empty">
+      <div class="le-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      </div>
+      <div class="le-h">No books yet</div>
+      <div class="le-s">Add any PDF and it will be saved here. Pick up right where you left off, every time.</div>
+      <button class="le-btn" onclick="document.getElementById('lib-file').click()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add your first book
+      </button>
+    </div>
+
+    <!-- STORAGE INFO -->
+    <div id="storage-bar" class="hidden">
+      <span id="storage-txt">—</span>
+      <span>Stored locally in your browser</span>
+    </div>
+
+    <!-- INFO CARDS -->
+    <div id="widget-info">
+      <div class="wi-label">Features &amp; Info</div>
+      <div class="wi-grid">
+        <div class="wi-card">
+          <div class="wi-card-title">Lock Screen Controls</div>
+          <div class="wi-card-body">While playing, your phone shows the book title with previous, play, and next controls. Works on Android and desktop Chrome automatically.</div>
+        </div>
+        <div class="wi-card">
+          <div class="wi-card-title">Install as App</div>
+          <div class="wi-card-body">Use the Install button to add Legible to your home screen — no app store needed. On iPhone: Safari → Share → Add to Home Screen.</div>
+        </div>
+        <div class="wi-card">
+          <div class="wi-card-title">Home Screen Widgets</div>
+          <div class="wi-card-body">Native home screen widgets require an App Store app. This is a web app and cannot create those, but works great as a standalone installed app.</div>
+        </div>
+        <div class="wi-card">
+          <div class="wi-card-title">Books Stay Saved</div>
+          <div class="wi-card-body">All PDFs and reading positions are saved in your browser. Close the tab, come back — everything is right here. Delete books anytime.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ DELETE CONFIRM ════════════════════════════════════ -->
+<div id="del-confirm">
+  <div id="del-box">
+    <h3>Remove book?</h3>
+    <p id="del-name"></p>
+    <p>This removes the book and your reading position. It cannot be undone.</p>
+    <div class="del-btns">
+      <button id="del-cancel" onclick="closeDel()">Cancel</button>
+      <button id="del-confirm-btn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ READER SHELL ══════════════════════════════════════ -->
+<div id="shell">
+  <header id="hdr">
+    <button id="sb-tog" title="Toggle chapters">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div id="logo">Legible</div>
+    <div id="book-ttl">—</div>
+    <button id="back-btn" class="rdr-btn accent" onclick="goLibrary()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Library
+    </button>
+    <button class="rdr-btn" id="rd-settings-btn" title="Settings">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button id="install-btn" class="rdr-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Install
+    </button>
+    <input type="file" id="file-input" accept=".pdf"/>
+  </header>
+
+  <aside id="sb">
+    <div id="sb-hd">Chapters</div>
+    <div id="sb-stats"></div>
+    <div id="ch-list"></div>
+  </aside>
+  <div id="overlay"></div>
+
+  <main id="rd">
+    <div id="loading" class="hidden">
+      <div class="spin"></div>
+      <div id="ld-txt">Reading PDF…</div>
+      <div id="ld-pct">0%</div>
+      <div id="ocr-wrap" style="display:none;margin-top:14px;width:260px;max-width:80vw;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span id="ocr-badge" style="font-family:var(--mono);font-size:.58rem;color:var(--gold);letter-spacing:.1em;">OCR MODE</span>
+          <span id="ocr-conf" style="font-family:var(--mono);font-size:.58rem;color:var(--t3);"></span>
+        </div>
+        <div style="width:100%;height:2px;background:var(--line2);border-radius:2px;">
+          <div id="ocr-bar" style="height:2px;background:var(--gold);border-radius:2px;width:0%;transition:width .2s;"></div>
+        </div>
+        <div id="ocr-detail" style="font-family:var(--mono);font-size:.56rem;color:var(--t3);margin-top:5px;text-align:center;"></div>
+      </div>
+    </div>
+
+    <div id="rd-inner">
+      <!-- Background OCR badge -->
+      <div id="bg-scan-badge">
+        <div id="bg-scan-dot"></div>
+        <span id="bg-scan-txt">Scanning…</span>
+      </div>
+      <div id="book-cnt">
+        <div id="ch-title"></div>
+        <div id="ch-meta"></div>
+        <div id="paragraphs"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="pl">
+    <div id="scrub-wrap"><div id="scrub-fill"></div></div>
+    <div id="pl-row">
+      <div id="pl-info">
+        <div id="pl-now">Not playing</div>
+        <div id="pl-det">—</div>
+        <div id="pl-stat"></div>
+      </div>
+      <div id="pl-ctrl">
+        <!-- Prev chapter -->
+        <button class="ctrl-btn" id="ch-prev" title="Previous chapter">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+        </button>
+        <!-- Prev paragraph -->
+        <button class="ctrl-btn" id="p-prev" title="Previous paragraph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <!-- Play/Pause -->
+        <button class="ctrl-btn" id="play-btn">
+          <svg id="ico-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg id="ico-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <!-- Next paragraph -->
+        <button class="ctrl-btn" id="p-next" title="Next paragraph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <!-- Next chapter -->
+        <button class="ctrl-btn" id="ch-next" title="Next chapter">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+        </button>
+      </div>
+      <div id="pl-set">
+        <div class="sg">
+          <span class="sl">Voice</span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="voice-sel">
+              <optgroup label="British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
+              <optgroup label="American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
+              <optgroup label="Australian"><option value="Australian Female">Australian Female</option></optgroup>
+              <optgroup label="Indian"><option value="Indian English Female">Indian Female</option></optgroup>
+            </select>
+            <button id="test-voice-btn" title="Test voice">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              Test
+            </button>
+          </div>
+        </div>
+        <div class="sg">
+          <span class="sl">Speed</span>
+          <div class="spd-row">
+            <input type="range" id="speed-sl" min="0.5" max="1.8" step="0.1" value="0.9"/>
+            <span id="spd-val">0.9×</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ══ SETTINGS MODAL ════════════════════════════════════ -->
+<div id="settings-modal">
+  <div class="sm-box">
+    <div class="sm-hdr">
+      <div class="sm-hdr-text">
+        <div class="sm-title">Voice Settings</div>
+        <div class="sm-sub">Choose how you want to listen</div>
+      </div>
+      <button class="sm-close" onclick="closeSettings()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Plan cards -->
+    <div class="plan-grid">
+      <div id="pc-free" class="plan-card active" onclick="selectPlan('free')">
+        <div class="plan-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div class="plan-name">Free</div>
+        <div class="plan-desc">Browser TTS<br/>Unlimited</div>
+        <div class="plan-badge" id="pb-free">Active</div>
+      </div>
+      <div id="pc-ownkey" class="plan-card" onclick="selectPlan('ownkey')">
+        <div class="plan-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        </div>
+        <div class="plan-name">Own Keys</div>
+        <div class="plan-desc">Your AWS keys<br/>Neural quality</div>
+        <div class="plan-badge" id="pb-ownkey">Enter keys</div>
+      </div>
+      <div id="pc-pay" class="plan-card" onclick="selectPlan('pay')">
+        <div class="plan-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <div class="plan-name">Premium</div>
+        <div class="plan-desc">Our server<br/>Buy credits</div>
+        <div class="plan-badge" id="pb-pay">Buy credits</div>
+      </div>
+    </div>
+
+    <!-- Free panel -->
+    <div id="panel-free" class="sm-panel active">
+      <div class="sm-section">Voice &amp; Speed</div>
+      <div class="sm-field-grid">
+        <div class="sm-field">
+          <span class="sm-label">Voice</span>
+          <select id="free-voice-sel" class="sm-select">
+            <optgroup label="British"><option value="UK English Female">British Female</option><option value="UK English Male">British Male</option></optgroup>
+            <optgroup label="American"><option value="US English Female">American Female</option><option value="US English Male">American Male</option></optgroup>
+            <optgroup label="Australian"><option value="Australian Female">Australian Female</option></optgroup>
+            <optgroup label="Indian"><option value="Indian English Female">Indian Female</option></optgroup>
+          </select>
+        </div>
+        <div class="sm-field">
+          <span class="sm-label">Speed — <span id="free-spd-lbl">0.9×</span></span>
+          <div class="sm-range-row" style="margin-top:8px;">
+            <input type="range" id="free-speed-sl" class="sm-range" min="0.5" max="1.8" step="0.1" value="0.9"
+              oninput="document.getElementById('free-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"/>
+          </div>
+        </div>
+      </div>
+      <div class="sm-btn-row">
+        <button class="sm-btn" onclick="testFreeVoice()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          Test Voice
+        </button>
+      </div>
+      <div class="sm-info-box">
+        <span class="sm-info-green">Unlimited &amp; offline — uses your browser's built-in voice engine. No server, no internet needed once the app is loaded.</span>
+      </div>
+    </div>
+
+    <!-- Own Keys panel -->
+    <div id="panel-ownkey" class="sm-panel">
+      <div class="sm-section gold">AWS Polly — Your Keys</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px;">
+        <div class="sm-field">
+          <span class="sm-label">AWS Access Key ID</span>
+          <input id="ownkey-key" type="password" class="sm-input" placeholder="AKIAIOSFODNN7EXAMPLE"/>
+        </div>
+        <div class="sm-field">
+          <span class="sm-label">AWS Secret Access Key</span>
+          <input id="ownkey-secret" type="password" class="sm-input" placeholder="wJalrXUtnFEMI/K7MDENG…"/>
+        </div>
+        <div class="sm-field-grid">
+          <div class="sm-field">
+            <span class="sm-label">Region</span>
+            <select id="ownkey-region" class="sm-select">
+              <option value="ap-south-1">ap-south-1 (Mumbai)</option>
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+            </select>
+          </div>
+          <div class="sm-field">
+            <span class="sm-label">Neural Voice</span>
+            <select id="ownkey-voice" class="sm-select">
+              <optgroup label="British"><option value="Amy|neural">Amy</option><option value="Brian|neural">Brian</option><option value="Emma|neural">Emma</option></optgroup>
+              <optgroup label="American"><option value="Joanna|neural">Joanna</option><option value="Matthew|neural">Matthew</option><option value="Ruth|neural">Ruth</option><option value="Stephen|neural">Stephen</option></optgroup>
+              <optgroup label="Australian"><option value="Olivia|neural">Olivia</option></optgroup>
+              <optgroup label="Indian Neural"><option value="Kajal|neural">Kajal</option></optgroup>
+              <optgroup label="Indian Standard"><option value="Aditi|standard">Aditi</option><option value="Raveena|standard">Raveena</option></optgroup>
+            </select>
+          </div>
+        </div>
+        <div class="sm-field">
+          <span class="sm-label">Speed — <span id="ownkey-spd-lbl">0.9×</span></span>
+          <div class="sm-range-row" style="margin-top:8px;">
+            <input type="range" id="ownkey-speed-sl" class="sm-range" min="0.5" max="1.5" step="0.1" value="0.9"
+              oninput="document.getElementById('ownkey-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"/>
+          </div>
+        </div>
+      </div>
+      <div class="sm-btn-row">
+        <button class="sm-btn" onclick="testOwnKey()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          Test Voice
+        </button>
+        <button class="sm-btn" onclick="verifyOwnKey()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Verify Keys
+        </button>
+      </div>
+      <div id="ownkey-status" class="sm-status"></div>
+      <div class="sm-info-box">
+        <b>Keys stored only in your browser</b> — sent directly to AWS, never to our server.<br/>
+        Create an IAM user with only <code>polly:SynthesizeSpeech</code> permission.<br/>
+        Cost: Neural ~$16/1M chars · Standard ~$4/1M chars.
+      </div>
+    </div>
+
+    <!-- Premium panel -->
+    <div id="panel-pay" class="sm-panel">
+      <div class="sm-section gold">Premium — AWS Polly via Our Server</div>
+      <div class="sm-field-grid" style="margin-bottom:12px;">
+        <div class="sm-field">
+          <span class="sm-label">Neural Voice</span>
+          <select id="polly-voice-sel" class="sm-select">
+            <optgroup label="British"><option value="Amy|neural">Amy</option><option value="Brian|neural">Brian</option><option value="Emma|neural">Emma</option></optgroup>
+            <optgroup label="American"><option value="Joanna|neural">Joanna</option><option value="Matthew|neural">Matthew</option><option value="Ruth|neural">Ruth</option></optgroup>
+            <optgroup label="Australian"><option value="Olivia|neural">Olivia</option></optgroup>
+            <optgroup label="Indian"><option value="Kajal|neural">Kajal</option></optgroup>
+          </select>
+        </div>
+        <div class="sm-field">
+          <span class="sm-label">Speed — <span id="polly-spd-lbl">0.9×</span></span>
+          <div class="sm-range-row" style="margin-top:8px;">
+            <input type="range" id="polly-speed-sl" class="sm-range" min="0.5" max="1.5" step="0.1" value="0.9"
+              oninput="document.getElementById('polly-spd-lbl').textContent=parseFloat(this.value).toFixed(1)+'×'"/>
+          </div>
+        </div>
+      </div>
+      <div class="sm-credits-box">
+        <div class="sm-credits-label">Your Credits</div>
+        <div class="sm-credits-num">
+          <span id="paid-credits-display" class="sm-credits-big">—</span>
+          <span class="sm-credits-unit">characters · <span id="paid-pages-display">—</span> pages left</span>
+        </div>
+      </div>
+      <div class="sm-section">Buy Credits</div>
+      <div id="packs-container" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;"></div>
+      <div id="payment-status" class="sm-status"></div>
+    </div>
+
+    <div class="sm-footer">
+      <button class="sm-btn" onclick="closeSettings()">Cancel</button>
+      <button class="sm-btn primary" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ═══ INDEXEDDB ═══════════════════════════════════════════════════════════ */
+const DB = (() => {
+  let db = null;
+  const open = () => new Promise((res, rej) => {
+    const r = indexedDB.open('BookVoiceDB', 2);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('books'))     d.createObjectStore('books',     { keyPath:'name' });
+      if (!d.objectStoreNames.contains('positions')) d.createObjectStore('positions', { keyPath:'name' });
+    };
+    r.onsuccess = e => { db = e.target.result; res(); };
+    r.onerror   = () => rej(r.error);
+  });
+  const tx  = (s, m) => db.transaction(s, m).objectStore(s);
+  const put  = (s, v) => new Promise((res, rej) => { const r = tx(s,'readwrite').put(v); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const get  = (s, k) => new Promise((res, rej) => { const r = tx(s,'readonly').get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const all  = (s)    => new Promise((res, rej) => { const r = tx(s,'readonly').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const del  = (s, k) => new Promise((res, rej) => { const r = tx(s,'readwrite').delete(k); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  return {
+    init:           ()        => open(),
+    saveBook:       (name, data, meta) => put('books', { name, data, meta, savedAt: Date.now() }),
+    getBook:        (name)    => get('books', name),
+    getAllBooks:     ()        => all('books'),
+    deleteBook:     (name)    => Promise.all([del('books', name), del('positions', name)]),
+    savePos:        (name, p) => put('positions', { name, ...p, savedAt: Date.now() }),
+    getPos:         (name)    => get('positions', name),
+  };
+})();
+
+/* ═══ STATE ═══════════════════════════════════════════════════════════════ */
+let chapters = [], allParas = [], curCh = 0, curPara = 0;
+let isPlaying = false, bookName = '';
+let _sentences = [], _sIdx = 0, _paraIdx = 0;
+let pendingAutoPlay = false;
+let bookToDelete = null;
+
+/* ═══ PWA + SERVICE WORKER ════════════════════════════════════════════════ */
+(function() {
+  // Manifest
+  function ico(s) {
+    const c = document.createElement('canvas'); c.width=c.height=s;
+    const x = c.getContext('2d'); x.fillStyle='#131210'; x.fillRect(0,0,s,s);
+    x.fillStyle='#c4a44a'; x.font=`bold ${s*.5}px serif`;
+    x.textAlign='center'; x.textBaseline='middle'; x.fillText('L', s/2, s*.56);
+    return c.toDataURL();
+  }
+  const m = {
+    name:'Legible', short_name:'Legible', display:'standalone',
+    start_url:'./', background_color:'#0c0b09', theme_color:'#0c0b09',
+    icons:[
+      {src:ico(192),sizes:'192x192',type:'image/png'},
+      {src:ico(512),sizes:'512x512',type:'image/png'}
+    ]
+  };
+  const blob = new Blob([JSON.stringify(m)], {type:'application/json'});
+  const l = document.createElement('link'); l.rel='manifest';
+  l.href = URL.createObjectURL(blob);
+  document.head.appendChild(l);
+
+  // Service Worker — registers sw.js which caches everything for offline use
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(reg => {
+          console.log('[SW] Registered, scope:', reg.scope);
+          // When a new SW is waiting, activate it immediately
+          reg.addEventListener('updatefound', () => {
+            const newSW = reg.installing;
+            newSW.addEventListener('statechange', () => {
+              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                newSW.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+        })
+        .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+  }
+})();
+
+// ── Offline detection ─────────────────────────────────────────────────────
+let _isOffline = !navigator.onLine;
+function updateOfflineBanner(offline) {
+  _isOffline = offline;
+  let banner = document.getElementById('offline-banner');
+  if (offline) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = [
+        'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+        'background:#1a1510', 'border-bottom:1px solid #c4a44a',
+        'color:#c4a44a', 'font-family:var(--mono)', 'font-size:.62rem',
+        'padding:6px 16px', 'text-align:center', 'letter-spacing:.06em',
+      ].join(';');
+      banner.textContent = 'Offline — using browser voice. Books and position saved locally.';
+      document.body.prepend(banner);
+    }
+  } else {
+    banner?.remove();
+  }
+}
+window.addEventListener('online',  () => updateOfflineBanner(false));
+window.addEventListener('offline', () => updateOfflineBanner(true));
+if (_isOffline) updateOfflineBanner(true);
+
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById('install-btn').classList.add('show');
+  document.getElementById('lib-install').classList.add('show');
+});
+const installHandler = async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('install-btn').classList.remove('show');
+    document.getElementById('lib-install').classList.remove('show');
+  }
+  deferredPrompt = null;
+};
+document.getElementById('install-btn').onclick = installHandler;
+document.getElementById('lib-install').onclick  = installHandler;
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-btn').classList.remove('show');
+  document.getElementById('lib-install').classList.remove('show');
+});
+
+/* ═══ LIBRARY ═════════════════════════════════════════════════════════════ */
+async function showLibrary() {
+  stopSpeech();
+  hideLoadOverlay();
+  document.getElementById('shell').style.display = 'none';
+  document.getElementById('library-screen').classList.remove('hidden');
+
+  const books = await DB.getAllBooks();
+  books.sort((a, b) => b.savedAt - a.savedAt);
+
+  const grid  = document.getElementById('lib-grid');
+  const empty = document.getElementById('lib-empty');
+  const secHdr = document.getElementById('lib-section-hdr');
+  const storBar = document.getElementById('storage-bar');
+  grid.innerHTML = '';
+
+  if (!books.length) {
+    empty.classList.remove('hidden');
+    document.getElementById('hero').classList.add('hidden');
+    secHdr.style.display = 'none';
+    storBar.classList.add('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  secHdr.style.display = 'flex';
+  document.getElementById('lib-count').textContent = books.length + ' book' + (books.length > 1 ? 's' : '');
+
+  // Populate hero widget with most recent
+  const latest = books[0];
+  const latestPos = await DB.getPos(latest.name);
+  populateHero(latest, latestPos);
+
+  // Storage estimate
+  try {
+    const est = await navigator.storage.estimate();
+    const usedMB = (est.usage / 1024 / 1024).toFixed(1);
+    const quotaMB = (est.quota / 1024 / 1024).toFixed(0);
+    document.getElementById('storage-txt').textContent = `${usedMB} MB used of ~${quotaMB} MB available`;
+    storBar.classList.remove('hidden');
+  } catch {}
+
+  // Book cards
+  for (const book of books) {
+    const pos = await DB.getPos(book.name);
+    const pct = pos && book.meta ? Math.round((pos.para / book.meta.totalParas) * 100) : 0;
+    const chInfo = pos ? `Ch ${pos.ch + 1}` : 'Not started';
+
+    const card = document.createElement('div');
+    card.className = 'book-card';
+    card.innerHTML = `
+      <div class="bc-cover">
+        <div class="bc-spine"></div>
+        <svg width="28" height="32" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" style="color:var(--t3)"><rect x="3" y="1" width="18" height="26" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+      </div>
+      <div class="bc-body">
+        <div class="bc-title">${esc(book.name)}</div>
+        <div class="bc-meta">${book.meta ? book.meta.totalChapters + ' ch' : ''} · p.${pos ? pos.page || '—' : '—'}</div>
+        <div class="bc-bar-wrap"><div class="bc-bar" style="width:${pct}%"></div></div>
+      </div>
+      <div class="bc-foot">
+        <span class="bc-pct">${pct > 0 ? chInfo + ' · ' + pct + '%' : 'Not started'}</span>
+        <button class="bc-del" title="Remove book" data-name="${esc(book.name)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>`;
+    card.onclick = e => {
+      if (e.target.closest('.bc-del')) return;
+      openBook(book.name, false);
+    };
+    card.querySelector('.bc-del').onclick = e => {
+      e.stopPropagation(); askDelete(book.name);
+    };
+    grid.appendChild(card);
+  }
+}
+
+function populateHero(book, pos) {
+  const hero = document.getElementById('hero');
+  const pct  = pos && book.meta ? Math.round((pos.para / book.meta.totalParas) * 100) : 0;
+  document.getElementById('hero-title').textContent = book.name;
+  document.getElementById('hero-meta').textContent  =
+    pos ? `Chapter ${pos.ch + 1}  ·  Page ${pos.page || '—'}` : 'Not started yet';
+  document.getElementById('hero-bar').style.width = pct + '%';
+  document.getElementById('hero-pct').textContent  = pct + '% complete';
+  hero.classList.remove('hidden');
+  hero.dataset.book = book.name;
+}
+
+async function heroResume() {
+  const name = document.getElementById('hero').dataset.book;
+  if (!name) return;
+  openBook(name, true);  // auto-play
+}
+
+async function openBook(name, autoPlay) {
+  pendingAutoPlay = autoPlay;
+  showLoadOverlay('Opening book…', '');
+  const record = await DB.getBook(name);
+  if (!record) { hideLoadOverlay(); showLibrary(); return; }
+  await parsePDF(record.data, name, false);
+}
+
+function goLibrary() {
+  stopSpeech();
+  saveCurrentPos();
+  showLibrary();
+}
+
+/* ═══ LOAD OVERLAY ═══════════════════════════════════════════════════════ */
+function showLoadOverlay(txt, pct) {
+  const ov = document.getElementById('load-overlay');
+  document.getElementById('load-txt').textContent = txt || 'Processing…';
+  document.getElementById('load-pct').textContent = pct || '';
+  document.getElementById('load-ocr').style.display = 'none';
+  ov.style.display = 'flex';
+  // hide both screens while loading
+  document.getElementById('library-screen').classList.add('hidden');
+  document.getElementById('shell').style.display = 'none';
+}
+function hideLoadOverlay() {
+  document.getElementById('load-overlay').style.display = 'none';
+}
+function setLoadText(txt, pct) {
+  const t = document.getElementById('load-txt');
+  const p = document.getElementById('load-pct');
+  if (t) t.textContent = txt;
+  if (p) p.textContent = (pct !== undefined) ? pct : '';
+}
+function setLoadOCR(show, pct, detail, conf) {
+  const wrap = document.getElementById('load-ocr');
+  if (!wrap) return;
+  wrap.style.display = show ? 'block' : 'none';
+  if (show) {
+    const bar  = document.getElementById('load-ocr-bar');
+    const det  = document.getElementById('load-ocr-detail');
+    const confEl = document.getElementById('load-ocr-conf');
+    if (bar)    bar.style.width = (pct || 0) + '%';
+    if (det)    det.textContent = detail || '';
+    if (confEl && conf !== undefined) confEl.textContent = 'Confidence: ' + conf + '%';
+  }
+}
+
+/* ═══ FILE INPUT ══════════════════════════════════════════════════════════ */
+function isPDF(f) {
+  // Some mobile browsers return empty MIME type — fall back to extension check
+  return f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+}
+
+function bindFileInputs() {
+  const handler = async (e) => {
+    const f = e.target.files[0];
+    e.target.value = ''; // reset so same file can be re-picked
+    if (!isPDF(f)) {
+      alert('Please choose a PDF file.');
+      return;
+    }
+    await handleFileLoad(f);
+  };
+  document.getElementById('lib-file').addEventListener('change', handler);
+  document.getElementById('file-input').addEventListener('change', handler);
+}
+
+async function handleFileLoad(f) {
+  showLoadOverlay('Reading file…', '');
+  try {
+    const data = await f.arrayBuffer();
+    const name = f.name.replace(/\.pdf$/i, '');
+    await parsePDF(data, name, true);
+  } catch (err) {
+    console.error('File load error:', err);
+    hideLoadOverlay();
+    showToast('Could not read PDF: ' + (err.message || err), true);
+  }
+}
+
+document.body.addEventListener('dragover',  e => e.preventDefault());
+document.body.addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!isPDF(f)) { alert('Please drop a PDF file.'); return; }
+  await handleFileLoad(f);
+});
+
+/* ═══ PDF EXTRACTION — Hybrid: native text + Tesseract OCR for images ══════ */
+
+// Minimum characters from PDF.js text extraction to consider a page "digital"
+// Anything below this triggers OCR
+const MIN_TEXT_CHARS = 80;
+
+// Shared Tesseract worker (created once, reused across all pages)
+let _tesseractWorker = null;
+
+async function getTesseractWorker() {
+  if (_tesseractWorker) return _tesseractWorker;
+  _tesseractWorker = await Tesseract.createWorker('eng', 1, {
+    // Use CDN for language data so no download needed by the app
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+    logger:   m => {
+      if (m.status === 'recognizing text') {
+        const pct = Math.round((m.progress || 0) * 100);
+        setLoadOCR(true, pct, `Recognising… ${pct}%`);
+      }
+    },
+  });
+  return _tesseractWorker;
+}
+
+// Render a PDF page to a canvas at given scale for OCR
+async function renderPageToCanvas(page, scale = 2.5) {
+  const vp     = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.floor(vp.width);
+  canvas.height = Math.floor(vp.height);
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
+// Extract text from a single page — tries native first, falls back to OCR
+async function extractPageText(page, pageNum, totalPages, isOCRMode) {
+  // ── Step 1: native PDF.js text extraction ──────────────────────────────
+  const content   = await page.getTextContent();
+  const items      = content.items.filter(it => it.str && it.str.trim());
+  const nativeText = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+
+  if (nativeText.length >= MIN_TEXT_CHARS) {
+    // Good digital text — process normally
+    return { lines: buildNativeLines(items), mode: 'native' };
+  }
+
+  // ── Step 2: OCR via Tesseract.js ──────────────────────────────────────
+  // Show OCR UI
+  setLoadOCR(true, 0, 'Rendering page…');
+  setLoadText(`OCR scanning page ${pageNum} of ${totalPages}…`);
+
+  const canvas = await renderPageToCanvas(page, 2.5);
+  const worker = await getTesseractWorker();
+
+  const { data } = await worker.recognize(canvas);
+
+  const conf = data.confidence ? Math.round(data.confidence) : '?';
+  setLoadOCR(true, 100, '', conf);
+
+  // Convert Tesseract paragraphs/lines → our format
+  const ocrLines = [];
+  if (data.blocks) {
+    for (const block of data.blocks) {
+      for (const para of (block.paragraphs || [])) {
+        const paraText = (para.lines || [])
+          .map(l => (l.words || []).map(w => w.text).join(' '))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (paraText.length > 10) ocrLines.push(paraText);
+      }
+    }
+  }
+  if (!ocrLines.length && data.text) {
+    // Fallback: use raw text split by newlines
+    data.text.split('\n').forEach(l => {
+      l = l.trim();
+      if (l.length > 10) ocrLines.push(l);
+    });
+  }
+
+  return { lines: ocrLines, mode: 'ocr', confidence: conf };
+}
+
+// Build structured lines from native PDF.js items
+function buildNativeLines(items) {
+  // group by y, sort left→right within lines
+  const lineMap = {};
+  for (const it of items) {
+    const y = Math.round(it.transform[5]);
+    if (!lineMap[y]) lineMap[y] = { refY: y, items: [], h: 0, w: 0 };
+    lineMap[y].items.push({
+      str: it.str, x: it.transform[4],
+      w: Math.abs(it.width)||0, h: Math.abs(it.height)||10
+    });
+    lineMap[y].h = Math.max(lineMap[y].h, Math.abs(it.height)||10);
+  }
+
+  const lines = Object.values(lineMap).sort((a, b) => b.refY - a.refY);
+
+  return lines.map(ln => {
+    ln.items.sort((a, b) => a.x - b.x);
+    let t = '';
+    for (let i = 0; i < ln.items.length; i++) {
+      if (i > 0) {
+        const gap = ln.items[i].x - (ln.items[i-1].x + ln.items[i-1].w);
+        t += (gap > 3 ? ' ' : '') + ln.items[i].str;
+      } else t = ln.items[i].str;
+    }
+    return { text: t.replace(/\s+/g, ' ').trim(), refY: ln.refY, h: ln.h };
+  }).filter(ln => ln.text.length > 0);
+}
+
+// Convert native lines → paragraph strings using gap detection
+function nativeLinesToParas(lines, page) {
+  if (!lines.length) return [];
+  const hs   = lines.map(l => l.h).filter(h => h > 2).sort((a,b) => a-b);
+  const medH = hs[Math.floor(hs.length/2)] || 12;
+  const GAP  = medH * 1.4;
+
+  const valid = lines.filter(ln =>
+    ln.text.length > 1 &&
+    !/^\d{1,4}$/.test(ln.text.trim()) &&
+    !/^[-–—]{2,}$/.test(ln.text.trim())
+  );
+
+  const paras = [];
+  let buf = [];
+  for (let i = 0; i < valid.length; i++) {
+    buf.push(valid[i].text);
+    const gap = valid[i+1] ? valid[i].refY - valid[i+1].refY : GAP + 1;
+    if (gap > GAP || i === valid.length - 1) {
+      const joined = buf.join(' ').replace(/\s+/g, ' ').trim();
+      if (joined.length > 10) paras.push({ text: joined, page });
+      buf = [];
+    }
+  }
+  return paras;
+}
+
+// ── Helper: build chapters+allParas from rawParas array ─────────────────
+function buildChaptersFromRaw(rawParas, name) {
+  const newAllParas = [];
+  const newChapters = [];
+  for (const { text, page } of rawParas) {
+    if (isHeading(text)) {
+      newChapters.push({ title: text, start: newAllParas.length, page });
+      newAllParas.push({ text, page, heading: true });
+    } else {
+      newAllParas.push({ text, page });
+    }
+  }
+  for (let i = 0; i < newChapters.length; i++)
+    newChapters[i].end = i+1 < newChapters.length ? newChapters[i+1].start : newAllParas.length;
+  if (!newChapters.length)
+    newChapters.push({ title: name, start: 0, end: newAllParas.length, page: 1 });
+  return { newAllParas, newChapters };
+}
+
+// ── How many pages to extract before launching reader ────────────────────
+const PRELOAD_PAGES = 5;
+
+async function parsePDF(data, name, saveToDB) {
+  stopSpeech();
+  bookName = name;
+  showLoadOverlay('Extracting text…', '0%');
+  setLoadOCR(false);
+
+  try {
+    const pdf   = await pdfjsLib.getDocument({ data: data instanceof ArrayBuffer ? data.slice(0) : data }).promise;
+    const total = pdf.numPages;
+    const rawParas = [];
+    let ocrPageCount = 0;
+    let readerLaunched = false;
+    // How many pages to scan before showing reader (less if book is short)
+    const preload = Math.min(PRELOAD_PAGES, total);
+
+    // ── Phase 1: extract first `preload` pages then show reader ──────────
+    for (let p = 1; p <= preload; p++) {
+      setLoadText(`Reading page ${p} of ${total}…`, Math.round(p / preload * 90) + '%');
+      const page   = await pdf.getPage(p);
+      const result = await extractPageText(page, p, total);
+      if (result.mode === 'ocr') {
+        ocrPageCount++;
+        for (const line of result.lines)
+          if (line.length > 10) rawParas.push({ text: line, page: p });
+      } else {
+        rawParas.push(...nativeLinesToParas(result.lines, p));
+      }
+    }
+
+    // Build initial chapters and launch reader
+    const init = buildChaptersFromRaw(rawParas, name);
+    allParas  = init.newAllParas;
+    chapters  = init.newChapters;
+
+    setLoadOCR(false);
+    hideLoadOverlay();
+    document.getElementById('library-screen').classList.add('hidden');
+    document.getElementById('shell').style.display = 'grid';
+    document.getElementById('book-ttl').textContent = name;
+    buildSidebar();
+    loadChapter(0);
+    readerLaunched = true;
+
+    // Restore saved position
+    const saved = await DB.getPos(name);
+    if (saved) { loadChapter(saved.ch); jumpTo(saved.para); }
+    if (pendingAutoPlay) { pendingAutoPlay = false; startReading(); }
+
+    // If book is fully loaded (≤ preload pages), save and done
+    if (total <= preload) {
+      if (saveToDB) {
+        await DB.saveBook(name, data instanceof ArrayBuffer ? data : data.buffer, {
+          totalChapters: chapters.length, totalParas: allParas.length, hadOCR: ocrPageCount > 0,
+        });
+      }
+      if (ocrPageCount > 0) showToast(`OCR: ${ocrPageCount} OCR page${ocrPageCount>1?'s':''} processed`);
+      return;
+    }
+
+    // ── Phase 2: continue remaining pages in background ──────────────────
+    const badge    = document.getElementById('bg-scan-badge');
+    const badgeTxt = document.getElementById('bg-scan-txt');
+    badge.classList.add('active');
+
+    // Run background scan without blocking the UI thread
+    (async () => {
+      try {
+        for (let p = preload + 1; p <= total; p++) {
+          // Update badge
+          badgeTxt.textContent = `OCR: Scanning page ${p} of ${total}…`;
+
+          const page   = await pdf.getPage(p);
+          const result = await extractPageText(page, p, total);
+
+          if (result.mode === 'ocr') {
+            ocrPageCount++;
+            for (const line of result.lines)
+              if (line.length > 10) rawParas.push({ text: line, page: p });
+          } else {
+            rawParas.push(...nativeLinesToParas(result.lines, p));
+          }
+
+          // Rebuild and merge new content into live reader every 5 pages
+          if (p % 5 === 0 || p === total) {
+            const updated = buildChaptersFromRaw(rawParas, name);
+            const wasPlaying = isPlaying;
+            const curChSave  = curCh;
+            const curParaSave = curPara;
+
+            allParas = updated.newAllParas;
+            chapters = updated.newChapters;
+
+            // Silently refresh sidebar without interrupting reading
+            buildSidebar();
+            // Re-clamp chapter index in case it's now valid
+            if (curChSave < chapters.length) {
+              curCh   = curChSave;
+              curPara = Math.min(curParaSave, allParas.length - 1);
+            }
+          }
+
+          // Yield to browser between pages so UI stays responsive
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        // Background scan complete
+        badge.classList.remove('active');
+        setLoadOCR(false);
+
+        // Final rebuild
+        const final = buildChaptersFromRaw(rawParas, name);
+        allParas  = final.newAllParas;
+        chapters  = final.newChapters;
+        buildSidebar();
+
+        // Save full book to DB
+        if (saveToDB) {
+          await DB.saveBook(name, data instanceof ArrayBuffer ? data : data.buffer, {
+            totalChapters: chapters.length, totalParas: allParas.length, hadOCR: ocrPageCount > 0,
+          });
+        }
+
+        showToast(`✓ Full book scanned — ${allParas.length} paragraphs ready`);
+
+      } catch (bgErr) {
+        console.error('Background scan error:', bgErr);
+        badge.classList.remove('active');
+        showToast('Background scan stopped: ' + (bgErr.message || bgErr), true);
+      }
+    })();
+
+  } catch(err) {
+    console.error('PDF parse error:', err);
+    hideLoadOverlay();
+    showLibrary();
+    showToast('Failed to read PDF: ' + (err.message || err), true);
+  }
+}
+
+function isHeading(text) {
+  if (text.length > 100) return false;
+  if (/^chapter\s+[\d\w]+/i.test(text))    return true;
+  if (/^part\s+[\divxlIVXL]+/i.test(text)) return true;
+  if (/^(introduction|preface|foreword|prologue|epilogue|conclusion|appendix|bibliography)/i.test(text)) return true;
+  if (/^\d{1,2}\.\s+[A-Z]/.test(text) && text.length < 70) return true;
+  const s = text.replace(/[^A-Za-z]/g, '');
+  if (s.length > 3 && s === s.toUpperCase() && text.length < 55) return true;
+  return false;
+}
+
+/* ═══ SIDEBAR ═════════════════════════════════════════════════════════════ */
+const sbEl=document.getElementById('sb');
+const ovEl=document.getElementById('overlay');
+document.getElementById('sb-tog').onclick=()=>{ sbEl.classList.toggle('open'); ovEl.classList.toggle('vis'); };
+ovEl.onclick=closeSB;
+function closeSB(){ sbEl.classList.remove('open'); ovEl.classList.remove('vis'); }
+
+function buildSidebar() {
+  const list=document.getElementById('ch-list');
+  list.innerHTML='';
+  document.getElementById('sb-stats').textContent=`${chapters.length} chapters · ${allParas.length} paragraphs`;
+  chapters.forEach((ch,i)=>{
+    const d=document.createElement('div');
+    d.className='chi';
+    d.innerHTML=`<span class="chin">Ch ${i+1} · p.${ch.page}</span>${ch.title}`;
+    d.onclick=()=>{ stopSpeech(); loadChapter(i); closeSB(); };
+    list.appendChild(d);
+  });
+}
+function activateSB(i){
+  document.querySelectorAll('.chi').forEach((el,idx)=>el.classList.toggle('active',idx===i));
+  document.querySelectorAll('.chi')[i]?.scrollIntoView({block:'nearest'});
+}
+
+/* ═══ CHAPTER ═════════════════════════════════════════════════════════════ */
+function loadChapter(i) {
+  curCh=i;
+  const ch=chapters[i];
+  activateSB(i);
+  document.getElementById('ch-title').textContent=ch.title;
+  document.getElementById('ch-meta').textContent=
+    `Chapter ${i+1} of ${chapters.length}  ·  Page ${ch.page}  ·  ${ch.end-ch.start} paragraphs`;
+  const box=document.getElementById('paragraphs');
+  box.innerHTML='';
+  for (let p=ch.start;p<ch.end;p++) {
+    if (allParas[p].heading) continue;
+    const d=document.createElement('div');
+    d.className='para'; d.dataset.idx=p; d.textContent=allParas[p].text;
+    d.onclick=()=>{ jumpTo(p); if(!isPlaying) startReading(); };
+    box.appendChild(d);
+  }
+  document.getElementById('book-cnt').classList.add('vis');
+  document.getElementById('rd').scrollTop=0;
+  curPara=ch.start;
+  updateProgress();
+}
+
+/* ═══ CONFIG ══════════════════════════════════════════════════════════════ */
+const SERVER = 'http://localhost:3000'; // ← change to your deployed URL
+
+async function getUserId() {
+  const saved = await DB.getPos('__userid__');
+  if (saved && saved.uid) return saved.uid;
+  const uid = 'bv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+  await DB.savePos('__userid__', { name:'__userid__', uid });
+  return uid;
+}
+
+/* ═══ SETTINGS STATE ══════════════════════════════════════════════════════ */
+let CFG = {
+  plan:         'free',      // 'free' | 'ownkey' | 'pay'
+  freeVoice:    'UK English Female',
+  freeSpeed:    0.9,
+  ownkeyKey:    '',
+  ownkeySecret: '',
+  ownkeyRegion: 'ap-south-1',
+  ownkeyVoice:  'Amy|neural',
+  ownkeySpeed:  0.9,
+  pollyVoice:   'Amy|neural',
+  pollySpeed:   0.9,
+};
+let USER_ID     = '';
+let userCredits = { freeRemaining:50000, paidCredits:0, freeMonthly:50000 };
+
+async function loadSettings() {
+  try { const s = await DB.getPos('__settings__'); if (s) Object.assign(CFG, s); } catch {}
+}
+async function persistSettings() {
+  await DB.savePos('__settings__', { ...CFG, name:'__settings__' });
+}
+
+async function fetchCredits() {
+  // Only attempt if not on free plan (free uses browser TTS, no server needed)
+  if (CFG.plan === 'free') return;
+  try {
+    const r = await fetch(`${SERVER}/api/credits?userId=${USER_ID}`);
+    if (r.ok) { userCredits = await r.json(); updateCreditsBadge(); }
+  } catch {}
+}
+
+function showToast(msg, isError) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:calc(var(--PL,78px) + 16px);left:50%;transform:translateX(-50%);
+    background:${isError ? '#c0392b' : '#1e3a2a'};border:1px solid ${isError ? '#e74c3c' : '#4caf7a'};
+    color:${isError ? '#fff' : '#4caf7a'};padding:10px 20px;border-radius:10px;
+    font-family:'DM Mono',monospace;font-size:.72rem;z-index:600;
+    box-shadow:0 4px 20px rgba(0,0,0,.5);white-space:nowrap;pointer-events:none;`;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2200);
+}
+
+function updateCreditsBadge() {
+  const badge = document.getElementById('credits-badge');
+  if (!badge) return;
+  if (CFG.plan === 'free') {
+    badge.classList.remove('active');
+    return;
+  } else if (CFG.plan === 'ownkey') {
+    badge.textContent = 'Own AWS Keys';
+    badge.style.color = 'var(--gold)';
+    badge.classList.add('active');
+  } else {
+    badge.textContent = `Credits: ${Math.round(userCredits.paidCredits/1000)}K chars`;
+    badge.style.color = userCredits.paidCredits < 10000 ? '#e8a84c' : '#c9a84c';
+    badge.classList.add('active');
+  }
+}
+
+/* ═══ SETTINGS MODAL ══════════════════════════════════════════════════════ */
+let _activePlan = 'free';
+
+function openSettings() {
+  // Populate from CFG
+  document.getElementById('free-voice-sel').value  = CFG.freeVoice;
+  document.getElementById('free-speed-sl').value   = CFG.freeSpeed;
+  document.getElementById('free-spd-lbl').textContent = CFG.freeSpeed.toFixed(1)+'×';
+  document.getElementById('ownkey-key').value       = CFG.ownkeyKey;
+  document.getElementById('ownkey-secret').value    = CFG.ownkeySecret;
+  document.getElementById('ownkey-region').value    = CFG.ownkeyRegion;
+  document.getElementById('ownkey-voice').value     = CFG.ownkeyVoice;
+  document.getElementById('ownkey-speed-sl').value  = CFG.ownkeySpeed;
+  document.getElementById('ownkey-spd-lbl').textContent = CFG.ownkeySpeed.toFixed(1)+'×';
+  document.getElementById('polly-voice-sel').value  = CFG.pollyVoice;
+  document.getElementById('polly-speed-sl').value   = CFG.pollySpeed;
+  document.getElementById('polly-spd-lbl').textContent = CFG.pollySpeed.toFixed(1)+'×';
+  selectPlan(CFG.plan);
+  updateCreditsDisplay();
+  loadPackButtons();
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+  document.getElementById('ownkey-status').textContent = '';
+}
+async function saveSettings() {
+  CFG.plan         = _activePlan;
+  CFG.freeVoice    = document.getElementById('free-voice-sel').value;
+  CFG.freeSpeed    = parseFloat(document.getElementById('free-speed-sl').value);
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  CFG.ownkeySpeed  = parseFloat(document.getElementById('ownkey-speed-sl').value);
+  CFG.pollyVoice   = document.getElementById('polly-voice-sel').value;
+  CFG.pollySpeed   = parseFloat(document.getElementById('polly-speed-sl').value);
+  await persistSettings();
+  updateCreditsBadge();
+  // Show saved confirmation
+  showToast('✓ Settings saved!');
+  closeSettings();
+}
+
+function selectPlan(plan) {
+  _activePlan = plan;
+  ['free','ownkey','pay'].forEach(p => {
+    const card  = document.getElementById('pc-'    + p);
+    const panel = document.getElementById('panel-' + p);
+    if (card)  card.classList.toggle('active', p === plan);
+    if (panel) panel.classList.toggle('active', p === plan);
+  });
+  const labels = { free:'Active', ownkey:'Enter keys', pay:'Buy credits' };
+  ['free','ownkey','pay'].forEach(p => {
+    const badge = document.getElementById('pb-' + p);
+    if (badge) badge.textContent = p === plan ? 'Active' : labels[p];
+  });
+}
+
+function updateCreditsDisplay() {
+  const paid = userCredits.paidCredits || 0;
+  const pdEl = document.getElementById('paid-credits-display');
+  const ppEl = document.getElementById('paid-pages-display');
+  if (pdEl) pdEl.textContent = paid.toLocaleString();
+  if (ppEl) ppEl.textContent = Math.floor(paid/1500);
+}
+
+async function loadPackButtons() {
+  const box = document.getElementById('packs-container');
+  box.innerHTML = '<div style="font-size:.7rem;color:var(--t3);">Loading…</div>';
+  try {
+    const r = await fetch(`${SERVER}/api/packs`);
+    const packs = await r.json();
+    box.innerHTML = '';
+    packs.forEach(pack => {
+      const priceINR = (pack.amount/100).toLocaleString('en-IN');
+      const btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:#0f0e0c;border:1px solid #2f2c26;color:#e8e4d9;padding:10px 14px;border-radius:9px;cursor:pointer;font-family:inherit;font-size:.75rem;width:100%;text-align:left;transition:border-color .15s;';
+      btn.innerHTML = `<span><b style="color:var(--gold)">${pack.credits.toLocaleString()}</b> chars <span style="color:var(--t3)">≈ ${pack.pages} pages</span></span><span style="background:#c9a84c;color:#0f0e0c;padding:4px 12px;border-radius:6px;font-weight:700;">₹${priceINR}</span>`;
+      btn.onmouseover = () => btn.style.borderColor='#c9a84c';
+      btn.onmouseout  = () => btn.style.borderColor='#2f2c26';
+      btn.onclick     = () => buyCredits(pack.id, pack.amount, pack.label, pack.credits);
+      box.appendChild(btn);
+    });
+  } catch {
+    box.innerHTML = '<div style="font-size:.7rem;color:#e05555;">Server not reachable — is it running?</div>';
+  }
+}
+
+async function buyCredits(packId, amount, label, credits) {
+  const statusEl = document.getElementById('payment-status');
+  statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Creating order…';
+  try {
+    const r   = await fetch(`${SERVER}/api/create-order`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ pack:packId, userId:USER_ID })
+    });
+    const ord = await r.json();
+    if (!r.ok) throw new Error(ord.error);
+    const rzp = new Razorpay({
+      key: ord.key, amount: ord.amount, currency: ord.currency,
+      name:'BookVoice Premium', description:label, order_id: ord.orderId,
+      theme:{ color:'#c9a84c' },
+      handler: async resp => {
+        statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Verifying…';
+        const vr = await fetch(`${SERVER}/api/verify-payment`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ...resp, userId:USER_ID, pack:packId })
+        });
+        const vd = await vr.json();
+        if (vd.success) {
+          await fetchCredits(); updateCreditsDisplay();
+          statusEl.style.color='var(--green)';
+          statusEl.textContent=`✓ ${credits.toLocaleString()} credits added!`;
+        } else {
+          statusEl.style.color='var(--red)'; statusEl.textContent='✗ Verification failed. Contact support.';
+        }
+      },
+      modal:{ ondismiss:()=>{ statusEl.textContent=''; } }
+    });
+    rzp.open(); statusEl.textContent='';
+  } catch(e) {
+    statusEl.style.color='var(--red)'; statusEl.textContent='✗ '+e.message;
+  }
+}
+
+// ── Own-key AWS Polly (direct from browser) ───────────────────────────────
+function _getOwnKeyPolly() {
+  AWS.config.update({
+    accessKeyId:     CFG.ownkeyKey,
+    secretAccessKey: CFG.ownkeySecret,
+    region:          CFG.ownkeyRegion,
+    signatureVersion:'v4',
+  });
+  return new AWS.Polly();
+}
+
+async function _callOwnKeyPolly(text) {
+  const [VoiceId, Engine] = CFG.ownkeyVoice.split('|');
+  const rate  = Math.round(CFG.ownkeySpeed * 100) + '%';
+  const safeT = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const ssml  = `<speak><prosody rate="${rate}">${safeT}</prosody></speak>`;
+  return new Promise((res, rej) => {
+    _getOwnKeyPolly().synthesizeSpeech(
+      { Text:ssml, TextType:'ssml', OutputFormat:'mp3', VoiceId, Engine },
+      (err, data) => err ? rej(err) : res(new Blob([data.AudioStream], {type:'audio/mpeg'}))
+    );
+  });
+}
+
+async function verifyOwnKey() {
+  const el = document.getElementById('ownkey-status');
+  el.style.color='#7a7568'; el.textContent='⏳ Checking…';
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  try {
+    await _callOwnKeyPolly('Test');
+    el.style.color='var(--green)'; el.textContent='✓ Keys valid — AWS Polly working!';
+  } catch(e) {
+    el.style.color='var(--red)'; el.textContent='✗ '+(e.message||'Invalid keys or region');
+  }
+}
+
+async function testOwnKey() {
+  const el = document.getElementById('ownkey-status');
+  el.style.color='#7a7568'; el.textContent='⏳ Synthesising…';
+  CFG.ownkeyKey    = document.getElementById('ownkey-key').value.trim();
+  CFG.ownkeySecret = document.getElementById('ownkey-secret').value.trim();
+  CFG.ownkeyRegion = document.getElementById('ownkey-region').value;
+  CFG.ownkeyVoice  = document.getElementById('ownkey-voice').value;
+  CFG.ownkeySpeed  = parseFloat(document.getElementById('ownkey-speed-sl').value);
+  try {
+    const [id] = CFG.ownkeyVoice.split('|');
+    const blob = await _callOwnKeyPolly(`Hello! I am ${id}, a neural voice from AWS Polly. This is how your book will sound.`);
+    const url  = URL.createObjectURL(blob);
+    const a    = new Audio(url); a.onended=()=>URL.revokeObjectURL(url); a.play();
+    el.style.color='var(--green)'; el.textContent='▶ Playing sample…';
+  } catch(e) {
+    el.style.color='var(--red)'; el.textContent='✗ '+(e.message||'Check keys and region');
+  }
+}
+
+function testFreeVoice() {
+  cancelTTS();
+  const v = document.getElementById('free-voice-sel').value;
+  const r = parseFloat(document.getElementById('free-speed-sl').value);
+  const s = `Hello! This is how your book will sound at this speed.`;
+  const useRV = !_isOffline && typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport();
+  if (useRV) {
+    responsiveVoice.speak(s, v, { rate: r });
+  } else {
+    _speakWithWebSpeech(s, () => {}, () => {});
+  }
+}
+
+document.getElementById('lib-settings-btn').onclick = openSettings;
+document.getElementById('rd-settings-btn').onclick  = openSettings;
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('settings-modal')) closeSettings();
+});
+
+/* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
+const _silentBlob  = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+const _silentAudio = new Audio(_silentBlob);
+_silentAudio.loop = true; _silentAudio.volume = 0.001;
+let _pollyAudio = null;
+
+function toSentences(text) {
+  const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g)||[text];
+  const out=[]; let buf='';
+  for (const s of raw) {
+    if ((buf+s).length>2800){ if(buf.trim()) out.push(buf.trim()); buf=s; } else buf+=s;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length ? out : [text.substring(0,2800)];
+}
+
+function speakSentence() {
+  if (!isPlaying) return;
+  if (_sIdx >= _sentences.length) {
+    markDone(_paraIdx); curPara = _paraIdx + 1; _speakParaAt(curPara); return;
+  }
+  const text  = _sentences[_sIdx++];
+  const onEnd = () => { if (isPlaying) speakSentence(); };
+  const onErr = () => { if (isPlaying) speakSentence(); };
+
+  if (CFG.plan === 'ownkey' && CFG.ownkeyKey && CFG.ownkeySecret) {
+    // ── Own AWS keys, called directly from browser ────────────────────
+    _callOwnKeyPolly(text)
+      .then(blob => {
+        if (!isPlaying) return;
+        const url = URL.createObjectURL(blob);
+        _pollyAudio = new Audio(url);
+        _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
+        _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
+        _pollyAudio.play().catch(onErr);
+      })
+      .catch(e => { setStat('⚠️ AWS error: '+e.message); onErr(); });
+
+  } else if (CFG.plan === 'pay') {
+    // ── Our server (paid credits) ─────────────────────────────────────
+    fetch(`${SERVER}/api/synthesize`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, voice:CFG.pollyVoice, userId:USER_ID }),
+    })
+    .then(async r => {
+      if (r.status === 402) {
+        setStat('⚠️ Credits exhausted. Open Settings → Buy more.');
+        isPlaying = false;
+        updatePlayIcon(false);
+        return null;
+      }
+      if (!r.ok) throw new Error('Server error '+r.status);
+      const freeLeft = r.headers.get('X-Free-Remaining');
+      const paid     = r.headers.get('X-Paid-Credits');
+      if (freeLeft) userCredits.freeRemaining = parseInt(freeLeft);
+      if (paid)     userCredits.paidCredits   = parseInt(paid);
+      updateCreditsBadge();
+      return r.blob();
+    })
+    .then(blob => {
+      if (!blob || !isPlaying) return;
+      const url = URL.createObjectURL(blob);
+      _pollyAudio = new Audio(url);
+      _pollyAudio.onended  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
+      _pollyAudio.onerror  = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
+      _pollyAudio.play().catch(onErr);
+    })
+    .catch(onErr);
+
+  } else {
+    // ── Free TTS: ResponsiveVoice (online) or Web Speech API (offline) ───
+    const useRV = !_isOffline
+                  && typeof responsiveVoice !== 'undefined'
+                  && responsiveVoice.voiceSupport();
+    if (useRV) {
+      responsiveVoice.speak(text, CFG.freeVoice, {
+        rate: CFG.freeSpeed,
+        onend:  onEnd,
+        onerror: () => {
+          // RV failed mid-sentence (went offline?) — fall back to Web Speech
+          _speakWithWebSpeech(text, onEnd, onErr);
+        }
+      });
+    } else {
+      _speakWithWebSpeech(text, onEnd, onErr);
+    }
+  }
+}
+
+// Web Speech API — works fully offline, built into every browser
+function _speakWithWebSpeech(text, onEnd, onErr) {
+  if (!window.speechSynthesis) { onErr(); return; }
+  // Cancel any stuck utterance
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate  = CFG.freeSpeed;
+  u.pitch = 1;
+  // Try to pick a matching voice (English preferred)
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length) {
+    const pick = voices.find(v => v.lang.startsWith('en') && !v.localService === false)
+              || voices.find(v => v.lang.startsWith('en'))
+              || voices[0];
+    if (pick) u.voice = pick;
+  }
+  u.onend   = onEnd;
+  u.onerror = e => { if (e.error !== 'interrupted') onErr(); };
+  window.speechSynthesis.speak(u);
+}
+
+function _speakParaAt(idx) {
+  if (!isPlaying||idx>=allParas.length){ stopSpeech(); return; }
+  if (allParas[idx].heading){ curPara=idx+1; _speakParaAt(idx+1); return; }
+  const ch=chapters[curCh];
+  if (idx>=ch.end&&curCh<chapters.length-1){ curCh++; loadChapter(curCh); curPara=chapters[curCh].start; _speakParaAt(curPara); return; }
+  _paraIdx=idx; _sentences=toSentences(allParas[idx].text); _sIdx=0;
+  highlight(idx); scrollTo(idx); updateProgress(); saveCurrentPos();
+  updateMediaSession(); speakSentence();
+}
+
+function startReading(){
+  if(isPlaying||!allParas.length) return;
+  isPlaying=true; updatePlayIcon(true); setStat('');
+  _silentAudio.play().catch(()=>{});
+  updateMediaSession('playing'); _speakParaAt(curPara);
+}
+function pauseReading(){
+  isPlaying=false; updatePlayIcon(false); cancelTTS();
+  updateMediaSession('paused');
+  // Keep silent audio alive so lock-screen controls stay registered
+}
+function stopSpeech(){
+  isPlaying=false; updatePlayIcon(false); cancelTTS();
+  _silentAudio.pause(); updateMediaSession('none');
+}
+function togglePlay(){ if(!allParas.length) return; isPlaying?pauseReading():startReading(); }
+function updatePlayIcon(playing){
+  const ip=document.getElementById('ico-play');
+  const ipa=document.getElementById('ico-pause');
+  if(ip)  ip.style.display = playing?'none':'block';
+  if(ipa) ipa.style.display= playing?'block':'none';
+}
+
+// ── Background / lock-screen resilience ───────────────────────────────────
+// When screen locks, browsers suspend SpeechSynthesis. We resume on visibility.
+let _bgTimer=null;
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    clearTimeout(_bgTimer);
+    if(isPlaying){
+      _bgTimer=setTimeout(()=>{
+        if(isPlaying){ cancelTTS(); _silentAudio.play().catch(()=>{}); _speakParaAt(curPara); }
+      },300);
+    }
+  } else {
+    if(isPlaying) _silentAudio.play().catch(()=>{});
+  }
+});
+// iOS Safari SpeechSynthesis pauses after ~15s — kick it every 10s
+setInterval(()=>{
+  if(isPlaying&&CFG.plan==='free'&&window.speechSynthesis){
+    if(typeof responsiveVoice==='undefined'||!responsiveVoice.voiceSupport()){
+      if(window.speechSynthesis.paused) window.speechSynthesis.resume();
+    }
+  }
+},10000);
+
+function cancelTTS() {
+  if(typeof responsiveVoice!=='undefined') responsiveVoice.cancel();
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  if(_pollyAudio){ try{_pollyAudio.pause();}catch{} _pollyAudio=null; }
+}
+function setStat(s){ const el=document.getElementById('pl-stat'); if(el) el.textContent=s; }
+
+function updateMediaSession(state) {
+  if(!('mediaSession' in navigator)) return;
+  if(bookName&&chapters[curCh]) {
+    navigator.mediaSession.metadata=new MediaMetadata({ title:bookName, artist:chapters[curCh].title, album:`Chapter ${curCh+1} of ${chapters.length}`, artwork:[{src:_makeIconURL(192),sizes:'192x192',type:'image/png'}] });
+  }
+  if(state) navigator.mediaSession.playbackState=state;
+  navigator.mediaSession.setActionHandler('play',startReading);
+  navigator.mediaSession.setActionHandler('pause',pauseReading);
+  navigator.mediaSession.setActionHandler('stop',stopSpeech);
+  navigator.mediaSession.setActionHandler('nexttrack',()=>document.getElementById('p-next').click());
+  navigator.mediaSession.setActionHandler('previoustrack',()=>document.getElementById('p-prev').click());
+}
+function _makeIconURL(size){ const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');x.fillStyle='#181613';x.fillRect(0,0,size,size);x.font=`${size*.58}px serif`;x.textAlign='center';x.textBaseline='middle';x.fillText('',size/2,size/2);return c.toDataURL('image/png'); }
+
+// Generate a stable userId per browser (stored in IndexedDB)
+async function getUserId() {
+  const saved = await DB.getPos('__userid__');
+  if (saved && saved.uid) return saved.uid;
+  const uid = 'bv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+  await DB.savePos('__userid__', { name:'__userid__', uid });
+  return uid;
+}
+
+/* ═══ CONTROLS ════════════════════════════════════════════════════════════ */
+document.getElementById('play-btn').onclick=togglePlay;
+document.getElementById('p-next').onclick=()=>{
+  const was=isPlaying; stopSpeech();
+  curPara=Math.min(curPara+1,allParas.length-1);
+  while(curPara<allParas.length-1&&allParas[curPara].heading) curPara++;
+  highlight(curPara); scrollTo(curPara); updateProgress();
+  if(was) startReading();
+};
+document.getElementById('p-prev').onclick=()=>{
+  const was=isPlaying; stopSpeech();
+  curPara=Math.max(curPara-1,0);
+  while(curPara>0&&allParas[curPara].heading) curPara--;
+  highlight(curPara); scrollTo(curPara); updateProgress();
+  if(was) startReading();
+};
+document.getElementById('ch-next').onclick=()=>{ if(curCh<chapters.length-1){stopSpeech();loadChapter(curCh+1);} };
+document.getElementById('ch-prev').onclick=()=>{ if(curCh>0){stopSpeech();loadChapter(curCh-1);} };
+document.getElementById('scrub-wrap').addEventListener('click',e=>{
+  if(!allParas.length) return;
+  const pct=e.offsetX/e.currentTarget.offsetWidth;
+  jumpTo(Math.floor(pct*allParas.length));
+});
+document.getElementById('speed-sl').oninput=function(){
+  document.getElementById('spd-val').textContent=parseFloat(this.value).toFixed(1)+'×';
+};
+
+/* ═══ HELPERS ═════════════════════════════════════════════════════════════ */
+function highlight(idx){ document.querySelectorAll('.para').forEach(e=>e.classList.remove('reading')); document.querySelector(`.para[data-idx="${idx}"]`)?.classList.add('reading'); }
+function markDone(idx){ const e=document.querySelector(`.para[data-idx="${idx}"]`); if(e){e.classList.remove('reading');e.classList.add('done');} }
+function scrollTo(idx){ document.querySelector(`.para[data-idx="${idx}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}); }
+function jumpTo(idx){ stopSpeech(); curPara=idx; highlight(idx); scrollTo(idx); updateProgress(); }
+
+function updateProgress(){
+  const ch=chapters[curCh]; if(!ch) return;
+  document.getElementById('pl-now').textContent=ch.title;
+  document.getElementById('pl-det').textContent=`Ch ${curCh+1}/${chapters.length}  ·  §${curPara-ch.start+1}/${ch.end-ch.start}  ·  p.${allParas[curPara]?.page||'?'}`;
+  const pct=allParas.length?(curPara/allParas.length)*100:0;
+  document.getElementById('scrub-fill').style.width=pct+'%';
+}
+
+function saveCurrentPos(){
+  if (!bookName||!allParas.length) return;
+  DB.savePos(bookName, { ch:curCh, para:curPara, page:allParas[curPara]?.page||0 });
+}
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ═══ DELETE ══════════════════════════════════════════════════════════════ */
+function askDelete(name){
+  bookToDelete=name;
+  document.getElementById('del-name').textContent=name;
+  document.getElementById('del-confirm').classList.add('show');
+}
+function closeDel(){ document.getElementById('del-confirm').classList.remove('show'); bookToDelete=null; }
+async function confirmDelete(){
+  if (!bookToDelete) return;
+  await DB.deleteBook(bookToDelete);
+  closeDel();
+  showLibrary();
+}
+
+/* ═══ KEYBOARD ════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(e.code==='Space')     { e.preventDefault(); togglePlay(); }
+  if(e.code==='ArrowRight') document.getElementById('p-next').click();
+  if(e.code==='ArrowLeft')  document.getElementById('p-prev').click();
+  if(e.code==='ArrowUp')    document.getElementById('ch-prev').click();
+  if(e.code==='ArrowDown')  document.getElementById('ch-next').click();
+});
+
+/* ═══ INIT ════════════════════════════════════════════════════════════════ */
+(async () => {
+  try {
+    await DB.init();
+    USER_ID = await getUserId();
+    await loadSettings();
+    bindFileInputs();
+    showLibrary();
+    if (CFG.plan !== 'free') fetchCredits();
+  } catch(e) {
+    console.error('Init failed:', e);
+    // Even if init fails, try to show the library so user can at least see the UI
+    document.getElementById('library-screen').classList.remove('hidden');
+    bindFileInputs();
+  }
+})();
+</script>
+</body>
