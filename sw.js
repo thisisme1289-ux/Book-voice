@@ -32,6 +32,11 @@ self.addEventListener('install', event => {
   );
 });
 
+// Listen for skip-waiting message from page
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 // Activate: clean up old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
