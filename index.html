@@ -2182,10 +2182,50 @@ document.getElementById('settings-modal').addEventListener('click', e => {
 });
 
 /* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
-const _silentBlob  = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-const _silentAudio = new Audio(_silentBlob);
-_silentAudio.loop = true; _silentAudio.volume = 0.001;
-let _pollyAudio = null;
+
+// ── Audio Session Keep-Alive ──────────────────────────────────────────────
+// The OS only grants background audio privileges to pages with a REAL audio
+// context producing output. A tiny silent WAV loop is not enough — the OS
+// detects silence and suspends the tab. We use AudioContext + a micro-gain
+// oscillator, which the OS treats as active media playback.
+let _audioCtx     = null;
+let _keepAliveOsc = null;
+let _pollyAudio   = null;
+
+function _initAudioCtx() {
+  if (_audioCtx) return;
+  try {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Oscillator → gain node → destination
+    // The oscillator runs at 1 Hz (sub-sonic, totally inaudible)
+    // but the AudioContext has a live output → OS keeps our audio session open
+    const osc  = _audioCtx.createOscillator();
+    const gain = _audioCtx.createGain();
+    gain.gain.value = 0.0001;        // inaudible
+    osc.frequency.value = 1;         // 1 Hz — below human hearing
+    osc.connect(gain);
+    gain.connect(_audioCtx.destination);
+    osc.start();
+    _keepAliveOsc = osc;
+  } catch(e) {
+    console.warn('[Audio] AudioContext failed:', e);
+  }
+}
+
+function _resumeAudioCtx() {
+  if (_audioCtx && _audioCtx.state === 'suspended') {
+    _audioCtx.resume().catch(() => {});
+  }
+}
+
+// Also keep the old silent <audio> element as a fallback for browsers
+// that don't honour AudioContext alone
+// 3-second silent MP3 (base64) — long enough for the OS to register it
+const _SILENT_MP3 = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhgCenp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6e////////////////////////////////////////////////////////////////AAAAAExhdmM1OC41AAAAAAAAAAAAAAAAJAAAAAAAAAOD1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//tQxAADwAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
+const _silentAudio = new Audio(_SILENT_MP3);
+_silentAudio.loop   = true;
+_silentAudio.volume = 0.001;
 
 function toSentences(text) {
   const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g)||[text];
@@ -2273,22 +2313,43 @@ function speakSentence() {
 // Web Speech API — works fully offline, built into every browser
 function _speakWithWebSpeech(text, onEnd, onErr) {
   if (!window.speechSynthesis) { onErr(); return; }
-  // Cancel any stuck utterance
-  window.speechSynthesis.cancel();
+  const ss = window.speechSynthesis;
+
+  // iOS quirk: calling speak() while already speaking causes silence.
+  // Cancel first, then defer one tick so the cancel takes effect.
+  ss.cancel();
+
   const u = new SpeechSynthesisUtterance(text);
   u.rate  = CFG.freeSpeed;
   u.pitch = 1;
-  // Try to pick a matching voice (English preferred)
-  const voices = window.speechSynthesis.getVoices();
+
+  // Pick best English voice
+  const voices = ss.getVoices();
   if (voices.length) {
-    const pick = voices.find(v => v.lang.startsWith('en') && !v.localService === false)
+    // Prefer local (on-device) voice — works offline and in background
+    const pick = voices.find(v => v.lang.startsWith('en') && v.localService)
               || voices.find(v => v.lang.startsWith('en'))
               || voices[0];
     if (pick) u.voice = pick;
   }
-  u.onend   = onEnd;
-  u.onerror = e => { if (e.error !== 'interrupted') onErr(); };
-  window.speechSynthesis.speak(u);
+
+  u.onstart = () => { _resetStallCheck(); };
+  u.onend   = () => { _resetStallCheck(); onEnd(); };
+  u.onerror = e => {
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    onErr();
+  };
+
+  // Defer one tick — required on some iOS versions
+  setTimeout(() => {
+    if (isPlaying) ss.speak(u);
+  }, 0);
+}
+
+// Voices load asynchronously on some browsers — warm them up immediately
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
 
 function _speakParaAt(idx) {
@@ -2303,18 +2364,29 @@ function _speakParaAt(idx) {
 
 function startReading(){
   if(isPlaying||!allParas.length) return;
-  isPlaying=true; updatePlayIcon(true); setStat('');
+  // Init + resume AudioContext on first user gesture (required by browsers)
+  _initAudioCtx();
+  _resumeAudioCtx();
+  // Also play the silent <audio> loop as a second fallback
   _silentAudio.play().catch(()=>{});
-  updateMediaSession('playing'); _speakParaAt(curPara);
+  isPlaying=true; updatePlayIcon(true); setStat('');
+  updateMediaSession('playing');
+  _speakParaAt(curPara);
 }
 function pauseReading(){
   isPlaying=false; updatePlayIcon(false); cancelTTS();
+  // KEEP both audio streams alive — pausing them releases audio focus
+  // and the OS removes our lock-screen controls
   updateMediaSession('paused');
-  // Keep silent audio alive so lock-screen controls stay registered
 }
 function stopSpeech(){
   isPlaying=false; updatePlayIcon(false); cancelTTS();
-  _silentAudio.pause(); updateMediaSession('none');
+  // Only stop the audio streams on explicit stop (not pause)
+  _silentAudio.pause();
+  if(_audioCtx && _audioCtx.state !== 'closed'){
+    // Don't close the context — just let oscillator idle at near-zero
+  }
+  updateMediaSession('none');
 }
 function togglePlay(){ if(!allParas.length) return; isPlaying?pauseReading():startReading(); }
 function updatePlayIcon(playing){
@@ -2325,28 +2397,73 @@ function updatePlayIcon(playing){
 }
 
 // ── Background / lock-screen resilience ───────────────────────────────────
-// When screen locks, browsers suspend SpeechSynthesis. We resume on visibility.
-let _bgTimer=null;
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){
-    clearTimeout(_bgTimer);
-    if(isPlaying){
-      _bgTimer=setTimeout(()=>{
-        if(isPlaying){ cancelTTS(); _silentAudio.play().catch(()=>{}); _speakParaAt(curPara); }
-      },300);
-    }
+// Strategy:
+//  1. AudioContext keeps the audio session open even with screen off
+//  2. SpeechSynthesis still gets suspended on iOS — we detect and restart
+//  3. On visibilitychange → visible: restart speech from current paragraph
+//  4. On visibilitychange → hidden: resume AudioContext in case OS suspended it
+//  5. Periodic kick prevents iOS Safari's 15s SpeechSynthesis auto-pause
+
+let _bgRestartTimer = null;
+let _hiddenAt       = 0;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    _hiddenAt = Date.now();
+    // Ensure audio session stays open while hidden
+    _resumeAudioCtx();
+    if (isPlaying) _silentAudio.play().catch(()=>{});
+
   } else {
-    if(isPlaying) _silentAudio.play().catch(()=>{});
+    // Page became visible again
+    clearTimeout(_bgRestartTimer);
+    _resumeAudioCtx();
+
+    if (isPlaying) {
+      // SpeechSynthesis was likely killed while hidden — restart it
+      // Small delay lets the page fully regain focus first
+      _bgRestartTimer = setTimeout(() => {
+        if (!isPlaying) return;
+        const elapsed = Date.now() - _hiddenAt;
+        // Cancel whatever broken state speech is in and restart paragraph
+        cancelTTS();
+        _silentAudio.play().catch(()=>{});
+        _speakParaAt(curPara);
+      }, 400);
+    }
   }
 });
-// iOS Safari SpeechSynthesis pauses after ~15s — kick it every 10s
-setInterval(()=>{
-  if(isPlaying&&CFG.plan==='free'&&window.speechSynthesis){
-    if(typeof responsiveVoice==='undefined'||!responsiveVoice.voiceSupport()){
-      if(window.speechSynthesis.paused) window.speechSynthesis.resume();
-    }
+
+// Kick SpeechSynthesis every 10s to prevent iOS 15s auto-pause
+// This only fires when the tab is visible (iOS suspends timers when hidden)
+// but combined with the visibilitychange restart it covers both cases
+setInterval(() => {
+  if (!isPlaying) return;
+  _resumeAudioCtx();
+  // For Web Speech API: resume if paused
+  if (window.speechSynthesis && window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
   }
-},10000);
+}, 10000);
+
+// Extra: on iOS, speechSynthesis randomly stops mid-sentence on long texts.
+// Detect a stalled state (isPlaying but synthesis not speaking) and restart.
+let _stallCheckTimer = null;
+function _resetStallCheck() {
+  clearTimeout(_stallCheckTimer);
+  if (!isPlaying) return;
+  _stallCheckTimer = setTimeout(() => {
+    if (!isPlaying) return;
+    const ss = window.speechSynthesis;
+    const rvActive = typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport() && !_isOffline;
+    // If using Web Speech API and it's neither speaking nor paused but we think we're playing
+    if (!rvActive && ss && !ss.speaking && !ss.paused && CFG.plan === 'free') {
+      // Stalled — restart current paragraph
+      cancelTTS();
+      _speakParaAt(curPara);
+    }
+  }, 3000); // if nothing happens for 3s while playing, restart
+}
 
 function cancelTTS() {
   if(typeof responsiveVoice!=='undefined') responsiveVoice.cancel();
