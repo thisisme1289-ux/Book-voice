@@ -2168,15 +2168,20 @@ async function testOwnKey() {
 
 function testFreeVoice() {
   cancelTTS();
-  const v = document.getElementById('free-voice-sel').value;
-  const r = parseFloat(document.getElementById('free-speed-sl').value);
-  const s = `Hello! This is how your book will sound at this speed.`;
-  const useRV = !_isOffline && typeof responsiveVoice !== 'undefined' && responsiveVoice.voiceSupport();
-  if (useRV) {
-    responsiveVoice.speak(s, v, { rate: r });
+  const prevVoice = CFG.freeVoice;
+  const prevSpeed = CFG.freeSpeed;
+  CFG.freeVoice = document.getElementById('free-voice-sel').value;
+  CFG.freeSpeed = parseFloat(document.getElementById('free-speed-sl').value);
+  const s = 'Hello! This is how your book will sound at this speed.';
+  if (!_isOffline) {
+    _fetchRvAudio(s)
+      .then(blob => _playBlob(blob, ()=>{}, ()=>{}))
+      .catch(()  => _wss(s, ()=>{}, ()=>{}));
   } else {
-    _wss(s, () => {}, () => {});
+    _wss(s, ()=>{}, ()=>{});
   }
+  CFG.freeVoice = prevVoice;
+  CFG.freeSpeed = prevSpeed;
 }
 
 document.getElementById('lib-settings-btn').onclick = openSettings;
@@ -2208,58 +2213,38 @@ let _pollyAudio = null;
 // DOM element that anchors our OS audio session
 const _player = document.getElementById('player');
 
-// ── Generate a loopable WAV with a 20 Hz sine wave ───────────────────────
-// 20 Hz is below the human hearing threshold (~20–20,000 Hz) but the OS
-// audio stack sees it as real non-silent audio and grants audio focus.
-// volume 0.001 makes it inaudible even if played at full device volume.
-function _makeToneBlob() {
-  const sr  = 22050, dur = 8, freq = 20, amp = 0.05;
-  const n   = sr * dur;
-  const buf = new ArrayBuffer(44 + n * 2);
-  const dv  = new DataView(buf);
-  const w   = (o, s) => [...s].forEach((c, i) => dv.setUint8(o + i, c.charCodeAt(0)));
-  w(0,'RIFF'); dv.setUint32(4, 36+n*2, true);
-  w(8,'WAVE'); w(12,'fmt '); dv.setUint32(16,16,true);
-  dv.setUint16(20,1,true); dv.setUint16(22,1,true);
-  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true);
-  dv.setUint16(32,2,true);  dv.setUint16(34,16,true);
-  w(36,'data'); dv.setUint32(40,n*2,true);
-  for (let i = 0; i < n; i++) {
-    dv.setInt16(44+i*2, Math.round(Math.sin(2*Math.PI*freq*i/sr)*amp*32767), true);
-  }
-  return new Blob([buf], { type:'audio/wav' });
-}
+// Tone generated directly in AudioContext (see _initAudioSession)
 
 // ── Init audio session (call on first user gesture) ───────────────────────
 let _sessionReady = false;
 function _initAudioSession() {
-  // If already running, just make sure it's playing
-  if (_sessionReady) { _player.play().catch(()=>{}); return; }
+  if (_sessionReady) return;
   _sessionReady = true;
 
-  // AudioContext — keeps the JS audio graph alive when tab is backgrounded
+  // AudioContext with inaudible tone — tells the OS we have active audio.
+  // This grants audio focus so _player can play in background.
   try {
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     _audioCtx.resume().catch(()=>{});
-  } catch(e) {}
+    // Route tone through AudioContext destination
+    const toneCtx  = _audioCtx;
+    const osc      = toneCtx.createOscillator();
+    const gain     = toneCtx.createGain();
+    gain.gain.value = 0.0001;    // completely inaudible
+    osc.frequency.value = 20;   // 20 Hz — below human hearing
+    osc.connect(gain);
+    gain.connect(toneCtx.destination);
+    osc.start();
+  } catch(e) { console.warn('[AudioCtx]', e); }
 
-  // Set the DOM <audio> src to our tone blob and start looping
-  try {
-    const blob = _makeToneBlob();
-    _player.src    = URL.createObjectURL(blob);
-    _player.volume = 0.001;
-    _player.loop   = true;
-    _player.play()
-      .then(() => { _setupMediaSession(); updateMediaSession('playing'); })
-      .catch(() => { _setupMediaSession(); updateMediaSession('playing'); });
-  } catch(e) {
-    console.warn('[Audio] session init failed:', e);
-  }
+  // _player is reserved for speech audio blobs — do NOT set src here.
+  // Just register media session handlers so controls appear immediately.
+  _setupMediaSession();
+  updateMediaSession('playing');
 }
 
 function _resumeAudioSession() {
   if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume().catch(()=>{});
-  if (_player.paused && _sessionReady) _player.play().catch(()=>{});
 }
 
 // ── Media Session ─────────────────────────────────────────────────────────
@@ -2330,6 +2315,70 @@ function toSentences(text) {
   return out.length ? out : [text.substring(0, 2800)];
 }
 
+// ── Voice name → RV API language code ────────────────────────────────────
+const _RV_LANG = {
+  'UK English Female':      { tl:'en-GB', sv:'g1', vn:'' },
+  'UK English Male':        { tl:'en-GB', sv:'g2', vn:'' },
+  'US English Female':      { tl:'en-US', sv:'g1', vn:'' },
+  'US English Male':        { tl:'en-US', sv:'g2', vn:'' },
+  'Australian Female':      { tl:'en-AU', sv:'g1', vn:'' },
+  'Indian English Female':  { tl:'en-IN', sv:'g1', vn:'' },
+};
+
+// ── Play audio blob through the main _player element ─────────────────────
+// This is the ONLY way audio works in background on Android.
+// Every audio source (free TTS, Polly, etc.) must go through _player.
+function _playBlob(blob, onEnd, onErr) {
+  if (!isPlaying) return;
+  const url = URL.createObjectURL(blob);
+  _player.onended  = () => { URL.revokeObjectURL(url); _player.onended=null; _player.onerror=null; onEnd(); };
+  _player.onerror  = () => { URL.revokeObjectURL(url); _player.onended=null; _player.onerror=null; onErr(); };
+  _player.src      = url;
+  _player.volume   = 1.0;
+  _player.loop     = false;
+  _player.play().catch(onErr);
+  _bgKick();
+}
+
+// ── Fetch free TTS audio (online) ─────────────────────────────────────────
+// ResponsiveVoice exposes a direct audio endpoint — we fetch the MP3 and
+// play it through _player instead of calling responsiveVoice.speak().
+// This means the OS sees real audio through our registered DOM element.
+async function _fetchRvAudio(text) {
+  const v    = _RV_LANG[CFG.freeVoice] || _RV_LANG['UK English Female'];
+  const rate = Math.max(0.1, Math.min(1.5, CFG.freeSpeed));
+  const url  = `https://code.responsivevoice.org/getvoice.php?t=${encodeURIComponent(text)}&tl=${v.tl}&sv=${v.sv}&vn=${v.vn}&pitch=0.5&rate=${rate}&vol=1&key=FREE`;
+  const r    = await fetch(url);
+  if (!r.ok) throw new Error('TTS fetch ' + r.status);
+  return r.blob();
+}
+
+// ── Offline TTS via Web Speech API ────────────────────────────────────────
+// Only used when offline — Web Speech API does NOT work in background.
+// The tone loop keeps the notification alive; speech may stop when screen locks.
+function _wss(text, onEnd, onErr) {
+  const ss = window.speechSynthesis;
+  if (!ss) { onErr(); return; }
+  ss.cancel();
+  const u  = new SpeechSynthesisUtterance(text);
+  u.rate   = CFG.freeSpeed; u.pitch = 1;
+  const vv = ss.getVoices();
+  if (vv.length) {
+    u.voice = vv.find(v => v.lang.startsWith('en') && v.localService)
+           || vv.find(v => v.lang.startsWith('en'))
+           || vv[0];
+  }
+  u.onend  = () => { _bgKick(); onEnd(); };
+  u.onerror = e => { if (e.error !== 'interrupted' && e.error !== 'canceled') onErr(); };
+  setTimeout(() => { if (isPlaying) ss.speak(u); }, 0);
+}
+
+// Warm up voices list
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
 // ── Speak one sentence ────────────────────────────────────────────────────
 function speakSentence() {
   if (!isPlaying) return;
@@ -2341,83 +2390,59 @@ function speakSentence() {
   const onErr = () => { if (isPlaying) speakSentence(); };
 
   if (CFG.plan === 'ownkey' && CFG.ownkeyKey && CFG.ownkeySecret) {
+    // Own AWS Polly keys — fetch blob, play through _player
     _callOwnKeyPolly(text)
-      .then(blob => {
-        if (!isPlaying) return;
-        const url = URL.createObjectURL(blob);
-        _pollyAudio = new Audio(url);
-        _pollyAudio.onended = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
-        _pollyAudio.onerror = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
-        _pollyAudio.play().catch(onErr);
-      })
-      .catch(e => { setStat('AWS error: '+e.message); onErr(); });
+      .then(blob => { if (isPlaying) _playBlob(blob, onEnd, onErr); })
+      .catch(e   => { setStat('AWS error: ' + e.message); onErr(); });
 
   } else if (CFG.plan === 'pay') {
+    // Paid server — fetch blob, play through _player
     fetch(`${SERVER}/api/synthesize`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ text, voice:CFG.pollyVoice, userId:USER_ID }),
     })
     .then(async r => {
       if (r.status === 402) { setStat('Credits exhausted.'); isPlaying=false; updatePlayIcon(false); return null; }
-      if (!r.ok) throw new Error('Server error '+r.status);
+      if (!r.ok) throw new Error('Server error ' + r.status);
       const fl = r.headers.get('X-Free-Remaining'), pd = r.headers.get('X-Paid-Credits');
       if (fl) userCredits.freeRemaining = parseInt(fl);
       if (pd) userCredits.paidCredits   = parseInt(pd);
       updateCreditsBadge(); return r.blob();
     })
-    .then(blob => {
-      if (!blob||!isPlaying) return;
-      const url = URL.createObjectURL(blob);
-      _pollyAudio = new Audio(url);
-      _pollyAudio.onended = () => { URL.revokeObjectURL(url); _pollyAudio=null; onEnd(); };
-      _pollyAudio.onerror = () => { URL.revokeObjectURL(url); _pollyAudio=null; onErr(); };
-      _pollyAudio.play().catch(onErr);
-    })
+    .then(blob => { if (blob && isPlaying) _playBlob(blob, onEnd, onErr); })
     .catch(onErr);
 
-  } else {
-    // ── Free: ResponsiveVoice when online, Web Speech when offline ────────
-    const useRV = !_isOffline
-               && typeof responsiveVoice !== 'undefined'
-               && responsiveVoice.voiceSupport();
-    if (useRV) {
-      responsiveVoice.speak(text, CFG.freeVoice, {
-        rate: CFG.freeSpeed, onend: onEnd,
-        onerror: () => _wss(text, onEnd, onErr),
+  } else if (!_isOffline) {
+    // ── Free + online: fetch MP3 from RV API, play through _player ────────
+    // This works in background because it's real audio through a DOM element.
+    _fetchRvAudio(text)
+      .then(blob => { if (isPlaying) _playBlob(blob, onEnd, onErr); })
+      .catch(()  => {
+        // RV fetch failed — fall back to Web Speech
+        _wss(text, onEnd, onErr);
       });
-    } else {
-      _wss(text, onEnd, onErr);
-    }
+
+  } else {
+    // ── Free + offline: Web Speech API ────────────────────────────────────
+    _wss(text, onEnd, onErr);
   }
 }
 
-// Web Speech API (offline fallback)
-function _wss(text, onEnd, onErr) {
+// ── Heartbeat: reset stall clock whenever audio actively plays ────────────
+let _lastSpeechTick = 0;
+function _bgKick() { _lastSpeechTick = Date.now(); }
+
+// timeupdate fires from the audio element clock even with screen locked.
+// Use it to detect stalls in offline/Web Speech mode and restart.
+_player.addEventListener('timeupdate', () => {
+  if (!isPlaying || !_isOffline) return; // online mode uses _playBlob, no stall needed
+  const now = Date.now();
+  if (now - _lastSpeechTick < 4000) return;
+  _lastSpeechTick = now;
   const ss = window.speechSynthesis;
-  if (!ss) { onErr(); return; }
-  ss.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = CFG.freeSpeed; u.pitch = 1;
-  const vv = ss.getVoices();
-  if (vv.length) {
-    u.voice = vv.find(v => v.lang.startsWith('en') && v.localService)
-           || vv.find(v => v.lang.startsWith('en'))
-           || vv[0];
-  }
-  u.onend   = () => { _bgKick(); onEnd(); };
-  u.onerror = e => { if (e.error!=='interrupted'&&e.error!=='canceled') onErr(); };
-  setTimeout(() => { if (isPlaying) ss.speak(u); }, 0);
-}
-
-// Kick speech synthesis every 10s to prevent iOS 15s auto-pause
-function _bgKick() { /* called after each sentence — resets any stall timers */ }
-setInterval(() => {
-  if (!isPlaying) return;
-  _resumeAudioSession();
-  if (window.speechSynthesis && window.speechSynthesis.paused) {
-    window.speechSynthesis.resume();
-  }
-}, 8000);
+  if (ss && ss.paused) { ss.resume(); return; }
+  if (ss && !ss.speaking) { ss.cancel(); _speakParaAt(curPara); }
+});
 
 // Warm up voices list
 if (window.speechSynthesis) {
@@ -2474,28 +2499,36 @@ function updatePlayIcon(playing) {
   if (ipa) ipa.style.display = playing ? 'block' : 'none';
 }
 
-// ── visibilitychange: resume after screen unlock ───────────────────────────
+// ── visibilitychange ─────────────────────────────────────────────────────
+// Online mode: _playBlob chains automatically — no intervention needed.
+// Offline mode: Web Speech may die — detect and restart via timeupdate.
 let _bgTimer = null;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    _resumeAudioSession(); // keep audio session alive
-  } else {
+  _resumeAudioSession();
+  if (document.visibilityState === 'visible' && isPlaying && _isOffline) {
+    // Web Speech may have died while hidden — give it 600ms then check
     clearTimeout(_bgTimer);
-    _resumeAudioSession();
-    if (isPlaying) {
-      // SpeechSynthesis was likely killed — give 500ms for focus to restore
-      _bgTimer = setTimeout(() => {
-        if (!isPlaying) return;
-        cancelTTS();
-        _speakParaAt(curPara); // restart from current para
-      }, 500);
-    }
+    _bgTimer = setTimeout(() => {
+      if (!isPlaying) return;
+      const ss = window.speechSynthesis;
+      if (ss && !ss.speaking && !ss.paused) {
+        ss.cancel(); _speakParaAt(curPara);
+      }
+    }, 600);
   }
 });
 
 function cancelTTS() {
-  if (typeof responsiveVoice !== 'undefined') responsiveVoice.cancel();
+  // Stop the player mid-sentence (clears onended so it doesn't chain)
+  if (_player && !_player.paused) {
+    _player.onended = null;
+    _player.onerror = null;
+    _player.pause();
+    // Don't clear src — we'll set it on next sentence
+  }
+  // Also cancel Web Speech (offline mode)
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  // Legacy Polly audio element (ownkey/pay)
   if (_pollyAudio) { try { _pollyAudio.pause(); } catch(e){} _pollyAudio = null; }
 }
 
