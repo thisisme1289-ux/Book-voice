@@ -1584,109 +1584,242 @@ async function renderPageToCanvas(page, scale = 2.5) {
   return canvas;
 }
 
-// Extract text from a single page — tries native first, falls back to OCR
-async function extractPageText(page, pageNum, totalPages, isOCRMode) {
-  // ── Step 1: native PDF.js text extraction ──────────────────────────────
-  const content   = await page.getTextContent();
-  const items      = content.items.filter(it => it.str && it.str.trim());
-  const nativeText = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+// ── PDF text extraction — native + OCR fallback ─────────────────────────
 
-  if (nativeText.length >= MIN_TEXT_CHARS) {
-    // Good digital text — process normally
+async function extractPageText(page, pageNum, totalPages) {
+  // Step 1: Native PDF.js extraction
+  const content = await page.getTextContent({ normalizeWhitespace: true, disableCombineTextItems: false });
+  const items   = content.items.filter(it => it.str && it.str.trim());
+  const native  = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+
+  if (native.length >= MIN_TEXT_CHARS) {
     return { lines: buildNativeLines(items), mode: 'native' };
   }
 
-  // ── Step 2: OCR via Tesseract.js ──────────────────────────────────────
-  // Show OCR UI
+  // Step 2: OCR
   setLoadOCR(true, 0, 'Rendering page…');
-  setLoadText(`OCR scanning page ${pageNum} of ${totalPages}…`);
+  setLoadText(`OCR page ${pageNum} of ${totalPages}…`);
 
-  const canvas = await renderPageToCanvas(page, 2.5);
-  const worker = await getTesseractWorker();
-
-  const { data } = await worker.recognize(canvas);
-
-  const conf = data.confidence ? Math.round(data.confidence) : '?';
+  const canvas = await renderPageToCanvas(page, 3.0);   // higher scale = better OCR
+  const enhanced = enhanceForOCR(canvas);               // contrast boost
+  const worker   = await getTesseractWorker();
+  const { data } = await worker.recognize(enhanced);
+  const conf     = data.confidence ? Math.round(data.confidence) : 0;
   setLoadOCR(true, 100, '', conf);
 
-  // Convert Tesseract paragraphs/lines → our format
-  const ocrLines = [];
-  if (data.blocks) {
+  return { lines: ocrDataToLines(data), mode: 'ocr', confidence: conf };
+}
+
+// ── Boost contrast so Tesseract reads faint/grey text reliably ────────────
+function enhanceForOCR(srcCanvas) {
+  const w = srcCanvas.width, h = srcCanvas.height;
+  const dst = document.createElement('canvas');
+  dst.width = w; dst.height = h;
+  const ctx = dst.getContext('2d');
+
+  // Draw original
+  ctx.drawImage(srcCanvas, 0, 0);
+
+  // Apply contrast + brightness via pixel manipulation
+  const img = ctx.getImageData(0, 0, w, h);
+  const d   = img.data;
+  const contrast = 1.5;   // 1.0 = no change, 1.5 = moderate boost
+  const bright   = 10;    // small brightness lift
+  const factor   = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
+  for (let i = 0; i < d.length; i += 4) {
+    d[i]   = Math.min(255, Math.max(0, factor * (d[i]   - 128) + 128 + bright));
+    d[i+1] = Math.min(255, Math.max(0, factor * (d[i+1] - 128) + 128 + bright));
+    d[i+2] = Math.min(255, Math.max(0, factor * (d[i+2] - 128) + 128 + bright));
+  }
+  ctx.putImageData(img, 0, 0);
+  return dst;
+}
+
+// ── Convert Tesseract output → clean paragraph strings ───────────────────
+function ocrDataToLines(data) {
+  const paras = [];
+
+  if (data.blocks && data.blocks.length) {
     for (const block of data.blocks) {
+      // Skip blocks that are mostly noise (< 30% confidence)
+      if (block.confidence < 25) continue;
+
       for (const para of (block.paragraphs || [])) {
-        const paraText = (para.lines || [])
-          .map(l => (l.words || []).map(w => w.text).join(' '))
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (paraText.length > 10) ocrLines.push(paraText);
+        if (para.confidence < 25) continue;
+
+        // Reconstruct paragraph line by line, rejoining hyphenated words
+        let buf = '';
+        for (const line of (para.lines || [])) {
+          const lineText = (line.words || [])
+            .filter(w => w.confidence > 20 && w.text && w.text.trim())
+            .map(w => w.text.trim())
+            .join(' ');
+
+          if (!lineText) continue;
+
+          if (buf) {
+            // Soft-hyphen at end of line → join without space
+            if (buf.endsWith('-') || buf.endsWith('—')) {
+              buf = buf.slice(0, -1) + lineText;
+            } else {
+              buf += ' ' + lineText;
+            }
+          } else {
+            buf = lineText;
+          }
+        }
+
+        const cleaned = cleanOCRText(buf);
+        if (cleaned.length > 8) paras.push(cleaned);
       }
     }
   }
-  if (!ocrLines.length && data.text) {
-    // Fallback: use raw text split by newlines
-    data.text.split('\n').forEach(l => {
-      l = l.trim();
-      if (l.length > 10) ocrLines.push(l);
-    });
+
+  // Fallback to raw text if block parsing produced nothing
+  if (!paras.length && data.text) {
+    data.text.split('\n')
+      .map(l => cleanOCRText(l))
+      .filter(l => l.length > 8)
+      .forEach(l => paras.push(l));
   }
 
-  return { lines: ocrLines, mode: 'ocr', confidence: conf };
+  return paras;
 }
 
-// Build structured lines from native PDF.js items
+// ── Clean common OCR noise ────────────────────────────────────────────────
+function cleanOCRText(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    // Remove lone non-alphanumeric characters (OCR noise)
+    .replace(/(?<![\w])[^\w\s,.!?;:'"-]{1,2}(?![\w])/g, '')
+    // Normalize quotes
+    .replace(/['']/g, "'").replace(/[""]/g, '"')
+    // Remove control characters
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .trim();
+}
+
+// ── Build lines from native PDF.js items ─────────────────────────────────
 function buildNativeLines(items) {
-  // group by y, sort left→right within lines
-  const lineMap = {};
+  // PDF.js gives Y coordinates from bottom of page — items on the same visual
+  // line share similar Y values. We bucket them with a tolerance band instead
+  // of rounding to integer, so items on the same line always group together.
+
+  // First pass: collect all Y values and font sizes
+  const rawLines = [];
   for (const it of items) {
-    const y = Math.round(it.transform[5]);
-    if (!lineMap[y]) lineMap[y] = { refY: y, items: [], h: 0, w: 0 };
-    lineMap[y].items.push({
-      str: it.str, x: it.transform[4],
-      w: Math.abs(it.width)||0, h: Math.abs(it.height)||10
-    });
-    lineMap[y].h = Math.max(lineMap[y].h, Math.abs(it.height)||10);
+    const y  = it.transform[5];           // exact Y, not rounded
+    const x  = it.transform[4];
+    const h  = Math.abs(it.height) || Math.abs(it.transform[3]) || 10;
+    const w  = Math.abs(it.width)  || 0;
+
+    // Find an existing line bucket within h*0.3 of this Y
+    let bucket = rawLines.find(b => Math.abs(b.refY - y) <= b.tol);
+    if (!bucket) {
+      bucket = { refY: y, tol: Math.max(h * 0.4, 2), h, items: [] };
+      rawLines.push(bucket);
+    }
+    // Update representative Y to weighted average (keeps bucket stable)
+    bucket.refY = (bucket.refY + y) / 2;
+    bucket.h    = Math.max(bucket.h, h);
+    bucket.items.push({ str: it.str, x, w, h });
   }
 
-  const lines = Object.values(lineMap).sort((a, b) => b.refY - a.refY);
+  // Sort lines top→bottom (PDF Y is bottom-up, so higher Y = higher on page)
+  rawLines.sort((a, b) => b.refY - a.refY);
 
-  return lines.map(ln => {
+  return rawLines.map(ln => {
+    // Sort items left→right within the line
     ln.items.sort((a, b) => a.x - b.x);
-    let t = '';
+
+    let text = '';
     for (let i = 0; i < ln.items.length; i++) {
-      if (i > 0) {
-        const gap = ln.items[i].x - (ln.items[i-1].x + ln.items[i-1].w);
-        t += (gap > 3 ? ' ' : '') + ln.items[i].str;
-      } else t = ln.items[i].str;
+      const it = ln.items[i];
+      if (i === 0) {
+        text = it.str;
+      } else {
+        const prev = ln.items[i - 1];
+        const gap  = it.x - (prev.x + prev.w);
+        // Use font height to calibrate what counts as a word space
+        // A gap wider than 25% of the font height = word boundary
+        const spaceThreshold = ln.h * 0.25;
+        if (gap > spaceThreshold) {
+          text += ' ' + it.str;
+        } else if (gap > -2) {
+          // Small positive gap (kerning/ligature) — no space needed
+          text += it.str;
+        } else {
+          // Negative gap = overlapping chars (bold, ligature) — join directly
+          text += it.str;
+        }
+      }
     }
-    return { text: t.replace(/\s+/g, ' ').trim(), refY: ln.refY, h: ln.h };
+
+    return {
+      text: text.replace(/\s+/g, ' ').trim(),
+      refY: ln.refY,
+      h:    ln.h
+    };
   }).filter(ln => ln.text.length > 0);
 }
 
-// Convert native lines → paragraph strings using gap detection
+// ── Convert native lines → paragraphs ────────────────────────────────────
 function nativeLinesToParas(lines, page) {
   if (!lines.length) return [];
-  const hs   = lines.map(l => l.h).filter(h => h > 2).sort((a,b) => a-b);
-  const medH = hs[Math.floor(hs.length/2)] || 12;
-  const GAP  = medH * 1.4;
 
-  const valid = lines.filter(ln =>
-    ln.text.length > 1 &&
-    !/^\d{1,4}$/.test(ln.text.trim()) &&
-    !/^[-–—]{2,}$/.test(ln.text.trim())
-  );
+  // Filter junk lines: page numbers, rule lines, very short fragments
+  const valid = lines.filter(ln => {
+    const t = ln.text.trim();
+    if (t.length <= 1)                         return false; // single char
+    if (/^\d{1,4}$/.test(t))                 return false; // bare page number
+    if (/^[-–—=*•·]{2,}$/.test(t))            return false; // rule/divider
+    if (/^[ivxlcdmIVXLCDM]{1,6}$/.test(t))   return false; // roman numeral alone
+    return true;
+  });
+
+  if (!valid.length) return [];
+
+  // Compute median line height for this page
+  const heights = valid.map(l => l.h).filter(h => h > 2).sort((a,b) => a - b);
+  const medH    = heights[Math.floor(heights.length / 2)] || 12;
+
+  // Paragraph break = gap larger than 1.6× normal line spacing
+  // Normal line spacing ≈ medH * 1.2 (leading), so para break ≈ medH * 1.9
+  const LINE_SPACING = medH * 1.2;
+  const PARA_GAP     = medH * 1.8;
 
   const paras = [];
-  let buf = [];
+  let   buf   = [];
+
   for (let i = 0; i < valid.length; i++) {
     buf.push(valid[i].text);
-    const gap = valid[i+1] ? valid[i].refY - valid[i+1].refY : GAP + 1;
-    if (gap > GAP || i === valid.length - 1) {
-      const joined = buf.join(' ').replace(/\s+/g, ' ').trim();
-      if (joined.length > 10) paras.push({ text: joined, page });
+
+    // Distance to next line
+    const nextGap = valid[i + 1]
+      ? valid[i].refY - valid[i + 1].refY
+      : PARA_GAP + 1;
+
+    if (nextGap > PARA_GAP || i === valid.length - 1) {
+      // End of paragraph — join buffered lines
+      // Lines that end mid-sentence (no sentence-ending punctuation) get
+      // joined with a space; lines ending with hyphen get joined directly
+      let joined = '';
+      for (let j = 0; j < buf.length; j++) {
+        const line = buf[j];
+        if (j === 0) {
+          joined = line;
+        } else if (joined.endsWith('-') || joined.endsWith('—')) {
+          joined = joined.slice(0, -1) + line; // dehyphenate
+        } else {
+          joined += ' ' + line;
+        }
+      }
+      joined = joined.replace(/\s+/g, ' ').trim();
+      if (joined.length > 8) paras.push({ text: joined, page });
       buf = [];
     }
   }
+
   return paras;
 }
 
