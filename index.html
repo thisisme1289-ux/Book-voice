@@ -7,6 +7,26 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Legible"/>
+<!-- ✅ SECURITY: Content Security Policy — restricts script/style/connect sources -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self' blob: data:;
+  script-src 'self' 'unsafe-inline'
+    https://cdnjs.cloudflare.com
+    https://unpkg.com
+    https://code.responsivevoice.org
+    https://sdk.amazonaws.com
+    https://checkout.razorpay.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' blob: data:;
+  media-src 'self' blob:;
+  connect-src 'self' blob:
+    https://code.responsivevoice.org
+    https://tessdata.projectnaptha.com
+    https://polly.*.amazonaws.com
+    https://api.razorpay.com;
+  worker-src blob:;
+">
 <title>Legible — PDF Reader</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -818,8 +838,13 @@ body {
 </head>
 <body>
 
-<!-- Background audio element — MUST be in DOM for Chrome to show media notifications -->
-<audio id="player" preload="none" style="display:none"></audio>
+<!-- Background audio element — MUST be in DOM before any scripts run.
+     playsinline: required on iOS to prevent full-screen takeover.
+     x-webkit-airplay: enables AirPlay on iOS Safari.
+     The preload="none" prevents wasted bandwidth before user interaction. -->
+<audio id="player" preload="none" playsinline
+  x-webkit-airplay="allow"
+  style="display:none"></audio>
 
 <!-- ══ LOAD OVERLAY ══════════════════════════════════════ -->
 <div id="load-overlay">
@@ -841,7 +866,7 @@ body {
   <header id="lib-hdr">
     <div id="lib-logo">Legible <span>by BookVoice</span></div>
     <div id="credits-badge"></div>
-    <button id="lib-install" class="hdr-btn primary" onclick="installHandler()">
+    <button id="lib-install" class="hdr-btn primary">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Install
     </button>
@@ -849,7 +874,7 @@ body {
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Settings
     </button>
-    <button class="hdr-btn primary" onclick="document.getElementById('lib-file').click()">
+    <button class="hdr-btn primary" id="lib-add-btn">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Add Book
     </button>
@@ -889,7 +914,7 @@ body {
       </div>
       <div class="le-h">No books yet</div>
       <div class="le-s">Add any PDF and it will be saved here. Pick up right where you left off, every time.</div>
-      <button class="le-btn" onclick="document.getElementById('lib-file').click()">
+      <button class="le-btn" id="lib-empty-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add your first book
       </button>
@@ -1128,7 +1153,8 @@ body {
         </button>
       </div>
       <div class="sm-info-box">
-        <span class="sm-info-green">Unlimited &amp; offline — uses your browser's built-in voice engine. No server, no internet needed once the app is loaded.</span>
+        <span class="sm-info-green">✦ Background audio supported</span> — audio is fetched as MP3 and played through the browser's media pipeline. Lock-screen controls, Bluetooth headsets, and Android notification controls all work.<br/><br/>
+        <b>Offline mode:</b> Falls back to browser speech synthesis, which <b>does not</b> survive backgrounding on most devices. Stay online for reliable background playback.
       </div>
     </div>
 
@@ -1273,47 +1299,140 @@ let pendingAutoPlay = false;
 let bookToDelete = null;
 
 /* ═══ PWA + SERVICE WORKER ════════════════════════════════════════════════ */
-(function() {
-  // Manifest
-  function ico(s) {
-    const c = document.createElement('canvas'); c.width=c.height=s;
-    const x = c.getContext('2d'); x.fillStyle='#131210'; x.fillRect(0,0,s,s);
-    x.fillStyle='#c4a44a'; x.font=`bold ${s*.5}px serif`;
-    x.textAlign='center'; x.textBaseline='middle'; x.fillText('L', s/2, s*.56);
-    return c.toDataURL();
-  }
-  const m = {
-    name:'Legible', short_name:'Legible', display:'standalone',
-    start_url:'./', background_color:'#0c0b09', theme_color:'#0c0b09',
-    icons:[
-      {src:ico(192),sizes:'192x192',type:'image/png'},
-      {src:ico(512),sizes:'512x512',type:'image/png'}
-    ]
-  };
-  const blob = new Blob([JSON.stringify(m)], {type:'application/json'});
-  const l = document.createElement('link'); l.rel='manifest';
-  l.href = URL.createObjectURL(blob);
-  document.head.appendChild(l);
+(function initPWA() {
 
-  // Service Worker — registers sw.js which caches everything for offline use
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(reg => {
-          console.log('[SW] Registered, scope:', reg.scope);
-          // When a new SW is waiting, activate it immediately
-          reg.addEventListener('updatefound', () => {
-            const newSW = reg.installing;
-            newSW.addEventListener('statechange', () => {
-              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-                newSW.postMessage({ type: 'SKIP_WAITING' });
-              }
-            });
-          });
-        })
-        .catch(err => console.warn('[SW] Registration failed:', err));
-    });
+  // ── 1. Generate crisp icons via Canvas ──────────────────────────────────
+  // Called once; returns a data-URL PNG of the Legible "L" lettermark.
+  function makeIcon(size) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, '#1e1b16');
+    grad.addColorStop(1, '#0c0b09');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Gold border frame
+    const bw = Math.max(2, size * 0.025);
+    const m1 = size * 0.055;
+    ctx.strokeStyle = '#c4a44a';
+    ctx.lineWidth   = bw;
+    ctx.strokeRect(m1 + bw / 2, m1 + bw / 2, size - m1 * 2 - bw, size - m1 * 2 - bw);
+
+    // Subtle inner accent
+    ctx.strokeStyle = 'rgba(196,164,74,0.22)';
+    ctx.lineWidth   = 1;
+    const m2 = size * 0.095;
+    ctx.strokeRect(m2, m2, size - m2 * 2, size - m2 * 2);
+
+    // "L" lettermark
+    ctx.fillStyle    = '#c4a44a';
+    ctx.font         = `700 ${Math.floor(size * 0.5)}px Georgia, serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('L', size / 2, size * 0.54);
+
+    return c.toDataURL('image/png');
   }
+
+  // ── 2. Inject Web App Manifest dynamically ───────────────────────────────
+  // Using a blob URL means we can ship a single HTML file with no
+  // separate manifest.json asset, while still satisfying PWA installability.
+  const icon192 = makeIcon(192);
+  const icon512 = makeIcon(512);
+
+  const manifest = {
+    name:             'Legible',
+    short_name:       'Legible',
+    description:      'PDF reader with text-to-speech — reads any book aloud.',
+    display:          'standalone',
+    orientation:      'portrait-primary',
+    start_url:        './',
+    scope:            './',
+    background_color: '#0c0b09',
+    theme_color:      '#0c0b09',
+    categories:       ['books', 'education', 'productivity'],
+    icons: [
+      { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+    ],
+    // Shortcuts let users jump straight into reading from the home-screen
+    // long-press menu on Android.
+    shortcuts: [
+      {
+        name:       'Open Library',
+        short_name: 'Library',
+        url:        './',
+        icons:      [{ src: icon192, sizes: '192x192' }],
+      },
+    ],
+  };
+
+  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const manifestURL  = URL.createObjectURL(manifestBlob);
+  const linkEl       = Object.assign(document.createElement('link'), {
+    rel:  'manifest',
+    href: manifestURL,
+  });
+  document.head.appendChild(linkEl);
+
+  // ── 3. Register Service Worker ───────────────────────────────────────────
+  // Guard against sandboxed preview environments where sw.js does not exist
+  // on the host (claudeusercontent, GitHub.dev, StackBlitz, etc.).
+  const swAllowed = (
+    'serviceWorker' in navigator &&
+    location.protocol !== 'file:' &&
+    !location.hostname.includes('claudeusercontent.com') &&
+    !location.hostname.includes('github.dev') &&
+    !location.hostname.includes('stackblitz.io') &&
+    !location.hostname.includes('codesandbox.io') &&
+    !location.hostname.includes('webcontainer')
+  );
+
+  if (!swAllowed) {
+    console.info('[PWA] Service Worker skipped in preview/sandbox environment.');
+    return;
+  }
+
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      console.log('[SW] Registered, scope:', reg.scope);
+
+      // When a new version of sw.js is found, activate it immediately
+      // (without waiting for all tabs to close) then reload to pick up changes.
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (!newSW) return;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            // New SW is ready and waiting — activate it now.
+            newSW.postMessage({ type: 'SKIP_WAITING' });
+            // Show a subtle toast so the user knows the app updated.
+            // (showToast is defined later but this fires async, so it's safe.)
+            setTimeout(() => {
+              if (typeof showToast === 'function') {
+                showToast('✦ App updated — refresh for the latest version.');
+              }
+            }, 500);
+          }
+        });
+      });
+
+      // Detect when a waiting SW has taken control (after SKIP_WAITING above).
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('[SW] Controller changed — new version active.');
+        // Don't auto-reload: the user might be mid-reading.
+        // The toast above is enough.
+      });
+
+    } catch (err) {
+      console.warn('[SW] Registration failed (expected in preview/sandbox):', err.message);
+    }
+  });
 })();
 
 // ── Offline detection ─────────────────────────────────────────────────────
@@ -1331,7 +1450,7 @@ function updateOfflineBanner(offline) {
         'color:#c4a44a', 'font-family:var(--mono)', 'font-size:.62rem',
         'padding:6px 16px', 'text-align:center', 'letter-spacing:.06em',
       ].join(';');
-      banner.textContent = 'Offline — using browser voice. Books and position saved locally.';
+      banner.textContent = 'Offline — using browser voice (background audio limited). Go online for full background playback.';
       document.body.prepend(banner);
     }
   } else {
@@ -1360,6 +1479,9 @@ const installHandler = async () => {
 };
 document.getElementById('install-btn').onclick = installHandler;
 document.getElementById('lib-install').onclick  = installHandler;
+// ✅ PATCHED: Wire Add Book buttons via addEventListener (no inline onclick)
+document.getElementById('lib-add-btn').addEventListener('click', () => document.getElementById('lib-file').click());
+document.getElementById('lib-empty-btn').addEventListener('click', () => document.getElementById('lib-file').click());
 window.addEventListener('appinstalled', () => {
   document.getElementById('install-btn').classList.remove('show');
   document.getElementById('lib-install').classList.remove('show');
@@ -1509,6 +1631,9 @@ function setLoadOCR(show, pct, detail, conf) {
 }
 
 /* ═══ FILE INPUT ══════════════════════════════════════════════════════════ */
+// ✅ PATCHED: 100 MB hard limit — prevents memory exhaustion on large files
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+
 function isPDF(f) {
   // Some mobile browsers return empty MIME type — fall back to extension check
   return f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
@@ -1522,6 +1647,11 @@ function bindFileInputs() {
       alert('Please choose a PDF file.');
       return;
     }
+    // ✅ PATCHED: File size validation
+    if (f.size > MAX_FILE_BYTES) {
+      alert(`File is too large (${(f.size/1024/1024).toFixed(1)} MB). Maximum allowed size is 100 MB.`);
+      return;
+    }
     await handleFileLoad(f);
   };
   document.getElementById('lib-file').addEventListener('change', handler);
@@ -1532,7 +1662,17 @@ async function handleFileLoad(f) {
   showLoadOverlay('Reading file…', '');
   try {
     const data = await f.arrayBuffer();
-    const name = f.name.replace(/\.pdf$/i, '');
+    // ✅ PATCHED: Verify PDF magic bytes (%PDF-) to prevent spoofed .pdf files
+    const magic = new Uint8Array(data.slice(0, 5));
+    const isPDFMagic = magic[0]===0x25 && magic[1]===0x50 && magic[2]===0x44 && magic[3]===0x46 && magic[4]===0x2D;
+    if (!isPDFMagic) {
+      hideLoadOverlay();
+      showToast('File does not appear to be a valid PDF.', true);
+      return;
+    }
+    // ✅ PATCHED: Sanitize filename — strip path traversal, limit length
+    const rawName = f.name.replace(/\.pdf$/i, '');
+    const name = rawName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 120) || 'Untitled';
     await parsePDF(data, name, true);
   } catch (err) {
     console.error('File load error:', err);
@@ -1546,6 +1686,11 @@ document.body.addEventListener('drop', async e => {
   e.preventDefault();
   const f = e.dataTransfer.files[0];
   if (!isPDF(f)) { alert('Please drop a PDF file.'); return; }
+  // ✅ PATCHED: Size check on drag-and-drop too
+  if (f.size > MAX_FILE_BYTES) {
+    alert(`File is too large (${(f.size/1024/1024).toFixed(1)} MB). Maximum allowed size is 100 MB.`);
+    return;
+  }
   await handleFileLoad(f);
 });
 
@@ -1555,39 +1700,59 @@ document.body.addEventListener('drop', async e => {
 // Anything below this triggers OCR
 const MIN_TEXT_CHARS = 80;
 
-// Shared Tesseract worker (created once, reused across all pages)
+// Shared Tesseract worker — created once, configured properly
 let _tesseractWorker = null;
 
 async function getTesseractWorker() {
   if (_tesseractWorker) return _tesseractWorker;
+
+  // Use tessdata_best — significantly higher accuracy than standard model
+  // The _best models are larger but essential for clean book text recognition
   _tesseractWorker = await Tesseract.createWorker('eng', 1, {
-    // Use CDN for language data so no download needed by the app
-    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-    logger:   m => {
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0_best',
+    logger: m => {
       if (m.status === 'recognizing text') {
         const pct = Math.round((m.progress || 0) * 100);
         setLoadOCR(true, pct, `Recognising… ${pct}%`);
       }
     },
   });
+
+  // PSM 6  = assume single uniform block of text (correct for book pages)
+  // PSM 3  = fully automatic (default, wrong — tries to detect columns/headers)
+  // OEM 1  = LSTM neural net only (most accurate)
+  // preserve_interword_spaces = keeps word gaps so words don't merge
+  // textord_really_old_xheight = helps with mixed font sizes (footnotes etc)
+  await _tesseractWorker.setParameters({
+    tessedit_pageseg_mode:       Tesseract.PSM.SINGLE_BLOCK, // PSM 6
+    tessedit_ocr_engine_mode:    Tesseract.OEM.LSTM_ONLY,    // OEM 1
+    preserve_interword_spaces:   '1',
+    textord_really_old_xheight:  '1',
+    // Only expect characters found in normal book text
+    tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?;:'-_()[]{}/@#$%&*+<>=~`|^\"",
+  });
+
   return _tesseractWorker;
 }
 
-// Render a PDF page to a canvas at given scale for OCR
-async function renderPageToCanvas(page, scale = 2.5) {
-  const vp     = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width  = Math.floor(vp.width);
-  canvas.height = Math.floor(vp.height);
-  const ctx = canvas.getContext('2d');
+// Render PDF page to canvas — white background, high DPI
+async function renderPageToCanvas(page, scale) {
+  const vp  = page.getViewport({ scale });
+  const c   = document.createElement('canvas');
+  c.width   = Math.floor(vp.width);
+  c.height  = Math.floor(vp.height);
+  const ctx = c.getContext('2d');
+  // Fill white — PDF.js leaves transparent by default, which OCR reads as grey noise
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
   await page.render({ canvasContext: ctx, viewport: vp }).promise;
-  return canvas;
+  return c;
 }
 
 // ── PDF text extraction — native + OCR fallback ─────────────────────────
 
 async function extractPageText(page, pageNum, totalPages) {
-  // Step 1: Native PDF.js extraction
+  // Step 1: native PDF.js text extraction
   const content = await page.getTextContent({ normalizeWhitespace: true, disableCombineTextItems: false });
   const items   = content.items.filter(it => it.str && it.str.trim());
   const native  = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
@@ -1597,42 +1762,96 @@ async function extractPageText(page, pageNum, totalPages) {
   }
 
   // Step 2: OCR
-  setLoadOCR(true, 0, 'Rendering page…');
-  setLoadText(`OCR page ${pageNum} of ${totalPages}…`);
+  setLoadOCR(true, 0, 'Preparing image…');
+  setLoadText('OCR page ' + pageNum + ' of ' + totalPages + '…');
 
-  const canvas = await renderPageToCanvas(page, 3.0);   // higher scale = better OCR
-  const enhanced = enhanceForOCR(canvas);               // contrast boost
-  const worker   = await getTesseractWorker();
-  const { data } = await worker.recognize(enhanced);
+  // Render at 3× scale — minimum for reliable Tesseract accuracy
+  // (300 DPI equivalent for a standard 8.5×11 page at screen resolution)
+  const raw       = await renderPageToCanvas(page, 3.0);
+  const processed = preprocessForOCR(raw);
+  const worker    = await getTesseractWorker();
+
+  setLoadOCR(true, 5, 'Running OCR…');
+  const { data } = await worker.recognize(processed);
   const conf     = data.confidence ? Math.round(data.confidence) : 0;
-  setLoadOCR(true, 100, '', conf);
+  setLoadOCR(true, 100, 'Done', conf);
 
   return { lines: ocrDataToLines(data), mode: 'ocr', confidence: conf };
 }
 
-// ── Boost contrast so Tesseract reads faint/grey text reliably ────────────
-function enhanceForOCR(srcCanvas) {
-  const w = srcCanvas.width, h = srcCanvas.height;
+// ── Image preprocessing pipeline ─────────────────────────────────────────
+// The single biggest factor in OCR quality is binarization.
+// Tesseract works best on pure black text on white background.
+// We use Otsu's method which finds the optimal global threshold automatically.
+function preprocessForOCR(srcCanvas) {
+  const w   = srcCanvas.width;
+  const h   = srcCanvas.height;
   const dst = document.createElement('canvas');
   dst.width = w; dst.height = h;
   const ctx = dst.getContext('2d');
 
-  // Draw original
+  // Draw source
   ctx.drawImage(srcCanvas, 0, 0);
-
-  // Apply contrast + brightness via pixel manipulation
   const img = ctx.getImageData(0, 0, w, h);
   const d   = img.data;
-  const contrast = 1.5;   // 1.0 = no change, 1.5 = moderate boost
-  const bright   = 10;    // small brightness lift
-  const factor   = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
-  for (let i = 0; i < d.length; i += 4) {
-    d[i]   = Math.min(255, Math.max(0, factor * (d[i]   - 128) + 128 + bright));
-    d[i+1] = Math.min(255, Math.max(0, factor * (d[i+1] - 128) + 128 + bright));
-    d[i+2] = Math.min(255, Math.max(0, factor * (d[i+2] - 128) + 128 + bright));
+
+  // ── Step 1: convert to grayscale ──────────────────────────────────────
+  // Use luminance formula (human eye is most sensitive to green)
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = d[i*4], g = d[i*4+1], b = d[i*4+2], a = d[i*4+3];
+    // Blend with white for transparent pixels (alpha < 255)
+    const fa  = a / 255;
+    const pr  = Math.round(r * fa + 255 * (1 - fa));
+    const pg  = Math.round(g * fa + 255 * (1 - fa));
+    const pb  = Math.round(b * fa + 255 * (1 - fa));
+    gray[i]   = Math.round(0.299 * pr + 0.587 * pg + 0.114 * pb);
   }
+
+  // ── Step 2: Otsu's thresholding ───────────────────────────────────────
+  // Computes the optimal threshold that maximises inter-class variance
+  // (i.e. best separates text pixels from background pixels)
+  const threshold = otsuThreshold(gray);
+
+  // ── Step 3: apply threshold + write back ─────────────────────────────
+  for (let i = 0; i < w * h; i++) {
+    const v = gray[i] <= threshold ? 0 : 255; // black text, white background
+    d[i*4]   = v;
+    d[i*4+1] = v;
+    d[i*4+2] = v;
+    d[i*4+3] = 255; // fully opaque
+  }
+
   ctx.putImageData(img, 0, 0);
   return dst;
+}
+
+// Otsu's method — finds optimal binarization threshold via histogram
+function otsuThreshold(gray) {
+  // Build 256-bin histogram
+  const hist = new Int32Array(256);
+  for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+
+  const total = gray.length;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
+
+  let sumB = 0, wB = 0, wF = 0;
+  let maxVar = 0, threshold = 128;
+
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue;
+    wF = total - wB; if (!wF) break;
+    sumB += t * hist[t];
+    const mB  = sumB / wB;
+    const mF  = (sum - sumB) / wF;
+    const var_ = wB * wF * (mB - mF) ** 2;
+    if (var_ > maxVar) { maxVar = var_; threshold = t; }
+  }
+
+  // Clamp: if threshold is very high (e.g. mostly-white page)
+  // cap at 200 to avoid treating light grey text as background
+  return Math.min(threshold, 200);
 }
 
 // ── Convert Tesseract output → clean paragraph strings ───────────────────
@@ -2044,7 +2263,26 @@ function loadChapter(i) {
 }
 
 /* ═══ CONFIG ══════════════════════════════════════════════════════════════ */
-const SERVER = 'http://localhost:3000'; // ← change to your deployed URL
+// ✅ PATCHED: SERVER must be set to your deployed backend URL.
+// Empty string = server features disabled (pay/credits won't work until set).
+// Never hardcode localhost here — it leaks infrastructure info in source.
+const SERVER = ''; // ← set to your deployed URL, e.g. 'https://api.yourapp.com'
+
+// ✅ Guard: prevents accidental calls to empty/localhost SERVER
+function _serverReachable() {
+  if (!SERVER || SERVER.trim() === '') return false;
+  try {
+    const u = new URL(SERVER);
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+      console.warn('[Config] SERVER points to localhost — server features disabled in production.');
+      return false;
+    }
+    if (u.protocol !== 'https:') {
+      console.warn('[Config] SERVER must use HTTPS in production.');
+    }
+    return true;
+  } catch { return false; }
+}
 
 async function getUserId() {
   const saved = await DB.getPos('__userid__');
@@ -2080,8 +2318,10 @@ async function persistSettings() {
 async function fetchCredits() {
   // Only attempt if not on free plan (free uses browser TTS, no server needed)
   if (CFG.plan === 'free') return;
+  // ✅ PATCHED: Guard against empty/localhost SERVER
+  if (!_serverReachable()) return;
   try {
-    const r = await fetch(`${SERVER}/api/credits?userId=${USER_ID}`);
+    const r = await fetch(`${SERVER}/api/credits?userId=${encodeURIComponent(USER_ID)}`);
     if (r.ok) { userCredits = await r.json(); updateCreditsBadge(); }
   } catch {}
 }
@@ -2184,6 +2424,11 @@ function updateCreditsDisplay() {
 
 async function loadPackButtons() {
   const box = document.getElementById('packs-container');
+  // ✅ PATCHED: Guard against empty/localhost SERVER
+  if (!_serverReachable()) {
+    box.innerHTML = '<div style="font-size:.7rem;color:var(--t3);">Server URL not configured — set SERVER in code.</div>';
+    return;
+  }
   box.innerHTML = '<div style="font-size:.7rem;color:var(--t3);">Loading…</div>';
   try {
     const r = await fetch(`${SERVER}/api/packs`);
@@ -2206,6 +2451,11 @@ async function loadPackButtons() {
 
 async function buyCredits(packId, amount, label, credits) {
   const statusEl = document.getElementById('payment-status');
+  // ✅ PATCHED: Guard against empty/localhost SERVER
+  if (!_serverReachable()) {
+    statusEl.style.color='var(--red)'; statusEl.textContent='✗ Server URL not configured.';
+    return;
+  }
   statusEl.style.color='#7a7568'; statusEl.textContent='⏳ Creating order…';
   try {
     const r   = await fetch(`${SERVER}/api/create-order`, {
@@ -2242,11 +2492,22 @@ async function buyCredits(packId, amount, label, credits) {
 }
 
 // ── Own-key AWS Polly (direct from browser) ───────────────────────────────
+// ⚠️ SECURITY NOTE: AWS keys entered here are stored in IndexedDB (browser-local only)
+// and sent directly to AWS — they never go through your server. However, users
+// MUST use a restricted IAM policy: grant ONLY polly:SynthesizeSpeech, no other permissions.
+// Never use root credentials or admin keys here.
 function _getOwnKeyPolly() {
+  // ✅ PATCHED: Validate keys exist before configuring AWS SDK
+  if (!CFG.ownkeyKey || !CFG.ownkeySecret) {
+    throw new Error('AWS credentials not configured');
+  }
+  if (CFG.ownkeyKey.length < 16 || CFG.ownkeySecret.length < 16) {
+    throw new Error('AWS credentials appear invalid');
+  }
   AWS.config.update({
     accessKeyId:     CFG.ownkeyKey,
     secretAccessKey: CFG.ownkeySecret,
-    region:          CFG.ownkeyRegion,
+    region:          CFG.ownkeyRegion || 'ap-south-1',
     signatureVersion:'v4',
   });
   return new AWS.Polly();
@@ -2307,7 +2568,7 @@ function testFreeVoice() {
   CFG.freeSpeed = parseFloat(document.getElementById('free-speed-sl').value);
   const s = 'Hello! This is how your book will sound at this speed.';
   if (!_isOffline) {
-    _fetchRvAudio(s)
+    _fetchRV(s, new AbortController().signal)
       .then(blob => _playBlob(blob, ()=>{}, ()=>{}))
       .catch(()  => _wss(s, ()=>{}, ()=>{}));
   } else {
@@ -2324,348 +2585,827 @@ document.getElementById('settings-modal').addEventListener('click', e => {
 });
 
 /* ═══ TTS ENGINE ══════════════════════════════════════════════════════════ */
-/*
- * HOW BACKGROUND AUDIO WORKS
- * ───────────────────────────
- * SpeechSynthesis is a foreground-only browser API. It stops the moment
- * the screen locks. The OS only keeps a web page's audio alive when a real
- * <audio> DOM element is actively playing non-silent content.
+/**
+ * BACKGROUND AUDIO ARCHITECTURE
+ * ──────────────────────────────────────────────────────────────────────────
  *
- * Fix: generate a short WAV containing a 20 Hz sine wave (below human
- * hearing) at near-zero volume. Loop it through <audio id="player">.
- * That claims the OS audio session → SpeechSynthesis piggybacks on it
- * and keeps running in background / lock screen.
+ * GOAL: behave like Spotify/Audible — audio continues when the screen locks,
+ * the user switches apps, or the tab is backgrounded.
  *
- * Media Session API then populates the lock-screen notification with the
- * book title, chapter, and play/pause/skip buttons.
+ * HOW IT WORKS
+ * ────────────
+ * 1. SINGLE AUDIO ELEMENT
+ *    All TTS audio is routed through one <audio id="player"> DOM element.
+ *    This is the only reliable way for Android Chrome and iOS Safari to keep
+ *    audio alive in the background. We never use multiple Audio() objects.
+ *
+ * 2. WEB AUDIO KEEP-ALIVE OSCILLATOR
+ *    An AudioContext with an inaudible 20 Hz sine oscillator runs continuously
+ *    from the first play gesture. This signals to the OS that the page has
+ *    active audio output, granting it background audio focus. Without this,
+ *    Android Chrome suspends audio processing after ~30 s in the background.
+ *    The oscillator gain is 0.00001 — completely below the noise floor.
+ *    The <audio> element is connected through the AudioContext via
+ *    createMediaElementSource → gainNode → destination so all output goes
+ *    through one graph.
+ *
+ * 3. MEDIA SESSION API
+ *    - Sets lock-screen metadata: title, chapter, artwork
+ *    - Registers play/pause/next/prev handlers for lock-screen buttons,
+ *      Bluetooth headsets, earbuds, car stereos, and Android notification controls
+ *    - Sets playbackState so the OS shows the correct play/pause icon
+ *    - Updates position (setPositionState) so scrubber works on lock screen
+ *
+ * 4. PREFETCH PIPELINE
+ *    While sentence N plays, sentence N+1 is fetched in the background.
+ *    When N finishes, N+1 plays instantly — zero gap. The pipeline uses
+ *    AbortController so stale fetches are cancelled cleanly on skip/pause.
+ *
+ * 5. STALL DETECTION + SELF-HEALING
+ *    A watchdog timer checks every 5 s whether audio has advanced.
+ *    If stalled for > 7 s (e.g. network timeout, Android audio focus steal),
+ *    it cancels the current fetch and restarts the paragraph from scratch.
+ *    visibilitychange also triggers a resume check with a 500 ms debounce.
+ *
+ * 6. OFFLINE FALLBACK
+ *    When the device is offline, Web Speech API (browser TTS) is used.
+ *    It does NOT survive background on most browsers, but it's the only
+ *    option without a network. The offline banner makes this clear.
+ *
+ * FREE TTS (RESPONSIVEVOICE)
+ *    We call /getvoice.php directly and get back an MP3 blob.
+ *    This is a real audio file played through _player — no SpeechSynthesis.
+ *    It works reliably in background because the OS sees a real media stream.
  */
 
-let _audioCtx   = null;
-let _pollyAudio = null;
+// ── Core audio state ──────────────────────────────────────────────────────
+const _player        = document.getElementById('player');
+let   _audioCtx      = null;
+let   _mediaGain     = null;   // GainNode connecting _player → AudioContext
+let   _keepAliveOsc  = null;   // inaudible oscillator for OS audio focus
+let   _sessionReady  = false;  // AudioContext + oscillator initialised
+let   _msReady       = false;  // Media Session handlers registered
 
-// DOM element that anchors our OS audio session
-const _player = document.getElementById('player');
+// Prefetch pipeline
+let   _prefetchBlob  = null;
+let   _prefetchAbort = null;
 
-// Tone generated directly in AudioContext (see _initAudioSession)
+// Stall / watchdog
+let   _lastPlayTime  = 0;
+let   _stalledTimer  = null;
+const STALL_TIMEOUT  = 7000;  // ms of silence before watchdog restarts
 
-// ── Init audio session (call on first user gesture) ───────────────────────
-let _sessionReady = false;
+// Position tracking for Media Session setPositionState
+let   _paraStartTime = 0;     // wall-clock when current para started playing
+let   _paraDuration  = 0;     // estimated duration of current para (seconds)
+
+// ── Voice map: display name → ResponsiveVoice API params ─────────────────
+const RV_VOICES = {
+  'UK English Female':     { tl: 'en-GB', sv: 'g1', vn: '' },
+  'UK English Male':       { tl: 'en-GB', sv: 'g2', vn: '' },
+  'US English Female':     { tl: 'en-US', sv: 'g1', vn: '' },
+  'US English Male':       { tl: 'en-US', sv: 'g2', vn: '' },
+  'Australian Female':     { tl: 'en-AU', sv: 'g1', vn: '' },
+  'Indian English Female': { tl: 'en-IN', sv: 'g1', vn: '' },
+};
+
+// ── Audio session (call once on first user gesture) ───────────────────────
 function _initAudioSession() {
-  if (_sessionReady) return;
+  if (_sessionReady) { _resumeCtx(); return; }
   _sessionReady = true;
 
-  // AudioContext with inaudible tone — tells the OS we have active audio.
-  // This grants audio focus so _player can play in background.
   try {
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    _audioCtx.resume().catch(()=>{});
-    // Route tone through AudioContext destination
-    const toneCtx  = _audioCtx;
-    const osc      = toneCtx.createOscillator();
-    const gain     = toneCtx.createGain();
-    gain.gain.value = 0.0001;    // completely inaudible
-    osc.frequency.value = 20;   // 20 Hz — below human hearing
-    osc.connect(gain);
-    gain.connect(toneCtx.destination);
-    osc.start();
-  } catch(e) { console.warn('[AudioCtx]', e); }
+    // Create the AudioContext in 'playback' latency mode.
+    // This hint tells the OS this is a music/audio app, not a voice call,
+    // and grants it lower-latency background scheduling on Android.
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+      latencyHint: 'playback',
+      sampleRate: 44100,
+    });
 
-  // _player is reserved for speech audio blobs — do NOT set src here.
-  // Just register media session handlers so controls appear immediately.
+    // Connect the <audio> element into the AudioContext graph.
+    // This is required for the keep-alive oscillator to work alongside the
+    // audio element — both must share the same AudioContext destination.
+    try {
+      const src = _audioCtx.createMediaElementSource(_player);
+      _mediaGain = _audioCtx.createGain();
+      _mediaGain.gain.value = 1.0;
+      src.connect(_mediaGain);
+      _mediaGain.connect(_audioCtx.destination);
+    } catch (e) {
+      // createMediaElementSource throws if the element is already connected
+      // (e.g. on hot-reload in dev). Safe to ignore — audio still works.
+      console.warn('[Audio] MediaElementSource:', e.message);
+    }
+
+    // Keep-alive oscillator: 20 Hz sine, gain ≈ 0.
+    // The OS audio scheduler considers the AudioContext "active" as long as
+    // an oscillator is running, even at inaudible gain. This prevents Android
+    // Chrome from suspending the audio pipeline after 30 s in background.
+    _keepAliveOsc = _audioCtx.createOscillator();
+    const kaGain  = _audioCtx.createGain();
+    kaGain.gain.setValueAtTime(0.00001, _audioCtx.currentTime); // truly silent
+    _keepAliveOsc.type            = 'sine';
+    _keepAliveOsc.frequency.value = 20; // below human hearing threshold
+    _keepAliveOsc.connect(kaGain);
+    kaGain.connect(_audioCtx.destination);
+    _keepAliveOsc.start();
+
+    _audioCtx.resume().catch(() => {});
+
+    console.log('[Audio] AudioContext ready, state:', _audioCtx.state);
+  } catch (e) {
+    console.warn('[Audio] AudioContext unavailable:', e.message);
+  }
+
   _setupMediaSession();
-  updateMediaSession('playing');
 }
 
-function _resumeAudioSession() {
-  if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume().catch(()=>{});
+function _resumeCtx() {
+  if (_audioCtx?.state === 'suspended') {
+    _audioCtx.resume().catch(e => console.warn('[Audio] Resume failed:', e.message));
+  }
 }
 
-// ── Media Session ─────────────────────────────────────────────────────────
-let _msReady = false;
+// ── Media Session API ─────────────────────────────────────────────────────
+/**
+ * Media Session gives us:
+ *  - Lock screen controls (play/pause/skip) on Android and desktop Chrome
+ *  - Bluetooth headset button support
+ *  - Car stereo / Android Auto integration
+ *  - Notification bar controls on Android
+ *  - AirPlay / Bluetooth metadata on macOS/iOS (artwork, title, artist)
+ *
+ * We register handlers ONCE and update metadata on every paragraph change.
+ */
 function _setupMediaSession() {
   if (!('mediaSession' in navigator) || _msReady) return;
   _msReady = true;
-  try {
-    navigator.mediaSession.setActionHandler('play',          startReading);
-    navigator.mediaSession.setActionHandler('pause',         pauseReading);
-    navigator.mediaSession.setActionHandler('stop',          stopSpeech);
-    navigator.mediaSession.setActionHandler('nexttrack',     () => document.getElementById('p-next').click());
-    navigator.mediaSession.setActionHandler('previoustrack', () => document.getElementById('p-prev').click());
-    navigator.mediaSession.setActionHandler('seekforward',   () => document.getElementById('p-next').click());
-    navigator.mediaSession.setActionHandler('seekbackward',  () => document.getElementById('p-prev').click());
-  } catch(e) {}
+
+  const ms   = navigator.mediaSession;
+  const safe = (action, fn) => {
+    try { ms.setActionHandler(action, fn); } catch (_) {}
+  };
+
+  safe('play',          () => { if (!isPlaying) startReading(); });
+  safe('pause',         () => { if (isPlaying)  pauseReading(); });
+  safe('stop',          stopSpeech);
+
+  // nexttrack / previoustrack → move one paragraph
+  safe('nexttrack',     () => document.getElementById('p-next')?.click());
+  safe('previoustrack', () => document.getElementById('p-prev')?.click());
+
+  // seekforward / seekbackward → move one paragraph (same as next/prev)
+  // Some headsets only fire seek rather than track events.
+  safe('seekforward',   details => {
+    // details.seekOffset is the requested jump in seconds; we ignore it and
+    // just skip a paragraph since we don't have a fixed-length timeline.
+    document.getElementById('p-next')?.click();
+  });
+  safe('seekbackward',  details => {
+    document.getElementById('p-prev')?.click();
+  });
+
+  console.log('[MediaSession] Handlers registered');
 }
 
+// Cached artwork data-URL (generated once per session)
+let _artworkDataUrl = null;
+
+function _getArtwork() {
+  if (_artworkDataUrl) return _artworkDataUrl;
+
+  const size = 512;
+  const c    = document.createElement('canvas');
+  c.width    = c.height = size;
+  const ctx  = c.getContext('2d');
+
+  // Dark gradient background matching the app theme
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#1e1b16');
+  grad.addColorStop(1, '#0c0b09');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  // Gold border frame
+  const bw = size * 0.025;
+  const m1 = size * 0.055;
+  ctx.strokeStyle = '#c4a44a';
+  ctx.lineWidth   = bw;
+  ctx.strokeRect(m1 + bw / 2, m1 + bw / 2, size - m1 * 2 - bw, size - m1 * 2 - bw);
+
+  // Subtle inner accent
+  ctx.strokeStyle = 'rgba(196,164,74,0.22)';
+  ctx.lineWidth   = 1;
+  const m2 = size * 0.095;
+  ctx.strokeRect(m2, m2, size - m2 * 2, size - m2 * 2);
+
+  // "L" lettermark
+  ctx.fillStyle    = '#c4a44a';
+  ctx.font         = `700 ${Math.floor(size * 0.5)}px Georgia, serif`;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('L', size / 2, size * 0.54);
+
+  _artworkDataUrl = c.toDataURL('image/png');
+  return _artworkDataUrl;
+}
+
+/**
+ * updateMediaSession — call whenever playback state or position changes.
+ * @param {'playing'|'paused'|'none'|undefined} state
+ */
 function updateMediaSession(state) {
   if (!('mediaSession' in navigator)) return;
+  const ms  = navigator.mediaSession;
+  const art = _getArtwork();
+
+  // Update metadata (lock-screen title, chapter info, artwork)
   if (bookName) {
     const ch = chapters[curCh];
-    const art = _makeArtwork(256);
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({
+      ms.metadata = new MediaMetadata({
         title:   bookName,
-        artist:  ch ? ch.title : '',
-        album:   ch ? `Chapter ${curCh+1} of ${chapters.length}` : '',
+        artist:  'Legible',
+        album:   ch ? `Ch ${curCh + 1} of ${chapters.length} — ${ch.title}` : 'Legible',
         artwork: [
-          { src: art, sizes: '96x96',   type: 'image/png' },
           { src: art, sizes: '192x192', type: 'image/png' },
-          { src: art, sizes: '256x256', type: 'image/png' },
+          { src: art, sizes: '512x512', type: 'image/png' },
         ],
       });
-    } catch(e) {}
+    } catch (_) {}
   }
-  try { if (state) navigator.mediaSession.playbackState = state; } catch(e) {}
-}
 
-function _makeArtwork(size) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const x = c.getContext('2d');
-  // Background gradient
-  const g = x.createLinearGradient(0, 0, size, size);
-  g.addColorStop(0, '#1a1612'); g.addColorStop(1, '#0c0b09');
-  x.fillStyle = g; x.fillRect(0, 0, size, size);
-  // Gold border
-  x.strokeStyle = '#c4a44a'; x.lineWidth = size * 0.03;
-  x.strokeRect(size*0.07, size*0.07, size*0.86, size*0.86);
-  // "L" letter
-  x.fillStyle = '#c4a44a';
-  x.font = `bold ${Math.floor(size*0.52)}px Georgia,serif`;
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText('L', size/2, size*0.52);
-  return c.toDataURL('image/png');
+  // Update playback state (controls the play/pause icon on lock screen)
+  if (state) {
+    try { ms.playbackState = state; } catch (_) {}
+  }
+
+  // Update position state so the lock-screen scrubber has some context.
+  // We don't have real duration (TTS is streamed), so we estimate based on
+  // word count: average ~130 words/min at speed 1.0.
+  try {
+    const para = allParas[_paraIdx];
+    if (para && state === 'playing') {
+      const words = para.text.split(/\s+/).length;
+      const wpm   = 130 * (CFG.freeSpeed || 0.9);
+      _paraDuration  = Math.max(1, (words / wpm) * 60);
+      _paraStartTime = _audioCtx ? _audioCtx.currentTime : 0;
+      ms.setPositionState?.({
+        duration:     _paraDuration,
+        playbackRate: CFG.freeSpeed || 1.0,
+        position:     0,
+      });
+    }
+  } catch (_) {}
 }
 
 // ── Sentence splitting ────────────────────────────────────────────────────
+/**
+ * Splits a paragraph into TTS-friendly chunks (≤ 250 chars).
+ * Shorter chunks mean faster first-audio latency and tighter prefetch timing.
+ */
 function toSentences(text) {
-  const raw = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g) || [text];
-  const out = []; let buf = '';
+  const MAX = 250;
+  // Match sentence-ending punctuation including closing quotes/parens
+  const raw = text.match(/[^.!?]+[.!?]+['"\u201d\u2019)]*\s*/g) || [text];
+  const out = [];
+  let   buf = '';
+
   for (const s of raw) {
-    if ((buf+s).length > 2800) { if (buf.trim()) out.push(buf.trim()); buf = s; }
-    else buf += s;
+    if ((buf + s).length > MAX) {
+      if (buf.trim()) out.push(buf.trim());
+      buf = s;
+    } else {
+      buf += s;
+    }
   }
   if (buf.trim()) out.push(buf.trim());
-  return out.length ? out : [text.substring(0, 2800)];
+  return out.length ? out : [text.slice(0, MAX)];
 }
 
-// ── Voice name → RV API language code ────────────────────────────────────
-const _RV_LANG = {
-  'UK English Female':      { tl:'en-GB', sv:'g1', vn:'' },
-  'UK English Male':        { tl:'en-GB', sv:'g2', vn:'' },
-  'US English Female':      { tl:'en-US', sv:'g1', vn:'' },
-  'US English Male':        { tl:'en-US', sv:'g2', vn:'' },
-  'Australian Female':      { tl:'en-AU', sv:'g1', vn:'' },
-  'Indian English Female':  { tl:'en-IN', sv:'g1', vn:'' },
-};
+// ── TTS fetch helpers ─────────────────────────────────────────────────────
 
-// ── Play audio blob through the main _player element ─────────────────────
-// This is the ONLY way audio works in background on Android.
-// Every audio source (free TTS, Polly, etc.) must go through _player.
+async function _fetchRV(text, signal) {
+  const v    = RV_VOICES[CFG.freeVoice] || RV_VOICES['UK English Female'];
+  const rate = Math.max(0.1, Math.min(1.5, CFG.freeSpeed || 0.9));
+  const url  = [
+    'https://code.responsivevoice.org/getvoice.php',
+    '?t=',   encodeURIComponent(text.slice(0, 250)),
+    '&tl=',  v.tl,
+    '&sv=',  v.sv,
+    '&vn=',  v.vn,
+    '&pitch=0.5&rate=', rate,
+    '&vol=1&key=FREE',
+  ].join('');
+
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`RV HTTP ${res.status}`);
+  const blob = await res.blob();
+  if (blob.size < 100) throw new Error('RV returned empty audio');
+  return blob;
+}
+
+async function _fetchPollyOwn(text, signal) {
+  const [VoiceId, Engine] = CFG.ownkeyVoice.split('|');
+  const rate = Math.round((CFG.ownkeySpeed || 0.9) * 100) + '%';
+  const safe = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const ssml = `<speak><prosody rate="${rate}">${safe}</prosody></speak>`;
+
+  // AbortController for Polly: AWS SDK doesn't accept a signal natively,
+  // but we wrap in a race with the abort event so we can cancel promptly.
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+    signal?.addEventListener('abort', () =>
+      reject(new DOMException('Aborted', 'AbortError')), { once: true }
+    );
+    _getOwnKeyPolly().synthesizeSpeech(
+      { Text: ssml, TextType: 'ssml', OutputFormat: 'mp3', VoiceId, Engine },
+      (err, data) => {
+        if (err) { reject(err); return; }
+        resolve(new Blob([data.AudioStream], { type: 'audio/mpeg' }));
+      }
+    );
+  });
+}
+
+async function _fetchServer(text, signal) {
+  if (!_serverReachable()) throw new Error('Server not configured');
+  const res = await fetch(`${SERVER}/api/synthesize`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ text, voice: CFG.pollyVoice, userId: USER_ID }),
+    signal,
+  });
+  if (res.status === 402) throw Object.assign(new Error('credits'), { code: 402 });
+  if (!res.ok) throw new Error(`Server HTTP ${res.status}`);
+
+  const fl = res.headers.get('X-Free-Remaining');
+  const pd = res.headers.get('X-Paid-Credits');
+  if (fl) userCredits.freeRemaining = parseInt(fl, 10);
+  if (pd) userCredits.paidCredits   = parseInt(pd, 10);
+  updateCreditsBadge();
+
+  return res.blob();
+}
+
+// Master dispatcher — selects the right TTS backend
+async function _fetchAudio(text, signal) {
+  if (CFG.plan === 'ownkey' && CFG.ownkeyKey && CFG.ownkeySecret) {
+    return _fetchPollyOwn(text, signal);
+  }
+  if (CFG.plan === 'pay') {
+    return _fetchServer(text, signal);
+  }
+  return _fetchRV(text, signal);
+}
+
+// ── Audio playback ────────────────────────────────────────────────────────
+/**
+ * _playBlob — loads a blob into the <audio> element and plays it.
+ *
+ * The blob URL is created just before play() and revoked in the cleanup
+ * handler so it is never leaked even if the element is stopped mid-stream.
+ *
+ * We do NOT revoke immediately on play() — Chrome on Android needs the
+ * URL to remain valid for the duration of playback for background audio
+ * to work correctly with the AudioContext graph.
+ */
 function _playBlob(blob, onEnd, onErr) {
   if (!isPlaying) return;
+
   const url = URL.createObjectURL(blob);
-  _player.onended  = () => { URL.revokeObjectURL(url); _player.onended=null; _player.onerror=null; onEnd(); };
-  _player.onerror  = () => { URL.revokeObjectURL(url); _player.onended=null; _player.onerror=null; onErr(); };
-  _player.src      = url;
-  _player.volume   = 1.0;
-  _player.loop     = false;
-  _player.play().catch(onErr);
-  _bgKick();
+  let   revoked = false;
+
+  const revoke = () => {
+    if (!revoked) { revoked = true; URL.revokeObjectURL(url); }
+  };
+
+  const cleanup = () => {
+    revoke();
+    _player.onended = null;
+    _player.onerror = null;
+    _lastPlayTime   = Date.now();
+  };
+
+  _player.onended = () => { cleanup(); onEnd(); };
+  _player.onerror = (e) => {
+    console.warn('[Player] onerror', e?.target?.error?.message);
+    cleanup();
+    onErr();
+  };
+
+  // Set src and playback parameters
+  _player.src    = url;
+  _player.volume = 1.0;
+  _player.loop   = false;
+
+  // Ensure AudioContext is running before we call play()
+  _resumeCtx();
+
+  _player.play()
+    .then(() => {
+      _lastPlayTime = Date.now();
+      _resetStallTimer();
+    })
+    .catch(err => {
+      // NotAllowedError = autoplay blocked (user hasn't gestured yet)
+      // NotSupportedError = codec not supported
+      console.warn('[Player] play() rejected:', err.name, err.message);
+      cleanup();
+      onErr();
+    });
 }
 
-// ── Fetch free TTS audio (online) ─────────────────────────────────────────
-// ResponsiveVoice exposes a direct audio endpoint — we fetch the MP3 and
-// play it through _player instead of calling responsiveVoice.speak().
-// This means the OS sees real audio through our registered DOM element.
-async function _fetchRvAudio(text) {
-  const v    = _RV_LANG[CFG.freeVoice] || _RV_LANG['UK English Female'];
-  const rate = Math.max(0.1, Math.min(1.5, CFG.freeSpeed));
-  const url  = `https://code.responsivevoice.org/getvoice.php?t=${encodeURIComponent(text)}&tl=${v.tl}&sv=${v.sv}&vn=${v.vn}&pitch=0.5&rate=${rate}&vol=1&key=FREE`;
-  const r    = await fetch(url);
-  if (!r.ok) throw new Error('TTS fetch ' + r.status);
-  return r.blob();
-}
+// ── Prefetch pipeline ─────────────────────────────────────────────────────
+/**
+ * While sentence N is playing, fetch sentence N+1 in the background so it
+ * plays instantly when N finishes — zero audible gap.
+ *
+ * Only one prefetch is ever in-flight. Cancelling via AbortController
+ * ensures we don't waste bandwidth on stale fetches after skip/pause.
+ */
+async function _prefetch(text) {
+  _prefetchAbort?.abort();
+  _prefetchBlob  = null;
 
-// ── Offline TTS via Web Speech API ────────────────────────────────────────
-// Only used when offline — Web Speech API does NOT work in background.
-// The tone loop keeps the notification alive; speech may stop when screen locks.
-function _wss(text, onEnd, onErr) {
-  const ss = window.speechSynthesis;
-  if (!ss) { onErr(); return; }
-  ss.cancel();
-  const u  = new SpeechSynthesisUtterance(text);
-  u.rate   = CFG.freeSpeed; u.pitch = 1;
-  const vv = ss.getVoices();
-  if (vv.length) {
-    u.voice = vv.find(v => v.lang.startsWith('en') && v.localService)
-           || vv.find(v => v.lang.startsWith('en'))
-           || vv[0];
+  if (!text || !isPlaying || _isOffline) return;
+
+  const ac = new AbortController();
+  _prefetchAbort = ac;
+
+  try {
+    _prefetchBlob = await _fetchAudio(text, ac.signal);
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.warn('[Prefetch] Failed:', e.message);
+      _prefetchBlob = null;
+    }
   }
-  u.onend  = () => { _bgKick(); onEnd(); };
-  u.onerror = e => { if (e.error !== 'interrupted' && e.error !== 'canceled') onErr(); };
-  setTimeout(() => { if (isPlaying) ss.speak(u); }, 0);
 }
 
-// Warm up voices list
-if (window.speechSynthesis) {
-  window.speechSynthesis.getVoices();
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+function _cancelPrefetch() {
+  _prefetchAbort?.abort();
+  _prefetchAbort = null;
+  _prefetchBlob  = null;
 }
 
 // ── Speak one sentence ────────────────────────────────────────────────────
 function speakSentence() {
   if (!isPlaying) return;
+
+  // All sentences in this paragraph are done — advance to next paragraph
   if (_sIdx >= _sentences.length) {
-    markDone(_paraIdx); curPara = _paraIdx + 1; _speakParaAt(curPara); return;
+    markDone(_paraIdx);
+    curPara = _paraIdx + 1;
+    _speakParaAt(curPara);
+    return;
   }
-  const text  = _sentences[_sIdx++];
+
+  const text    = _sentences[_sIdx++];
+  const nextTxt = _sIdx < _sentences.length ? _sentences[_sIdx] : null;
+
   const onEnd = () => { if (isPlaying) speakSentence(); };
-  const onErr = () => { if (isPlaying) speakSentence(); };
+  const onErr = () => {
+    // Skip broken sentence, brief back-off to avoid tight error loops
+    if (isPlaying) setTimeout(speakSentence, 400);
+  };
 
-  if (CFG.plan === 'ownkey' && CFG.ownkeyKey && CFG.ownkeySecret) {
-    // Own AWS Polly keys — fetch blob, play through _player
-    _callOwnKeyPolly(text)
-      .then(blob => { if (isPlaying) _playBlob(blob, onEnd, onErr); })
-      .catch(e   => { setStat('AWS error: ' + e.message); onErr(); });
-
-  } else if (CFG.plan === 'pay') {
-    // Paid server — fetch blob, play through _player
-    fetch(`${SERVER}/api/synthesize`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text, voice:CFG.pollyVoice, userId:USER_ID }),
-    })
-    .then(async r => {
-      if (r.status === 402) { setStat('Credits exhausted.'); isPlaying=false; updatePlayIcon(false); return null; }
-      if (!r.ok) throw new Error('Server error ' + r.status);
-      const fl = r.headers.get('X-Free-Remaining'), pd = r.headers.get('X-Paid-Credits');
-      if (fl) userCredits.freeRemaining = parseInt(fl);
-      if (pd) userCredits.paidCredits   = parseInt(pd);
-      updateCreditsBadge(); return r.blob();
-    })
-    .then(blob => { if (blob && isPlaying) _playBlob(blob, onEnd, onErr); })
-    .catch(onErr);
-
-  } else if (!_isOffline) {
-    // ── Free + online: fetch MP3 from RV API, play through _player ────────
-    // This works in background because it's real audio through a DOM element.
-    _fetchRvAudio(text)
-      .then(blob => { if (isPlaying) _playBlob(blob, onEnd, onErr); })
-      .catch(()  => {
-        // RV fetch failed — fall back to Web Speech
-        _wss(text, onEnd, onErr);
-      });
-
-  } else {
-    // ── Free + offline: Web Speech API ────────────────────────────────────
+  // Offline: use Web Speech API (doesn't survive background, but only option)
+  if (_isOffline) {
     _wss(text, onEnd, onErr);
+    return;
+  }
+
+  // Online: prefer prefetched blob for zero-gap playback
+  const blob    = _prefetchBlob;
+  _prefetchBlob = null;
+
+  if (blob) {
+    _playBlob(blob, onEnd, onErr);
+    if (nextTxt) _prefetch(nextTxt); // pipeline next
+  } else {
+    // No prefetch ready (first sentence, or prefetch was cancelled/failed)
+    const ac = new AbortController();
+    _prefetchAbort = ac;
+
+    _fetchAudio(text, ac.signal)
+      .then(b => {
+        if (!isPlaying) return;
+        _prefetchAbort = null;
+        _playBlob(b, onEnd, onErr);
+        if (nextTxt) _prefetch(nextTxt);
+      })
+      .catch(err => {
+        if (err.name === 'AbortError') return;
+        if (err.code === 402) {
+          setStat('Credits exhausted — open Settings to buy more.');
+          isPlaying = false;
+          updatePlayIcon(false);
+          updateMediaSession('paused');
+          return;
+        }
+        console.warn('[TTS] Fetch error:', err.message);
+        // Back-off 800 ms then skip sentence to keep reading flowing
+        setTimeout(() => { if (isPlaying) speakSentence(); }, 800);
+      });
   }
 }
 
-// ── Heartbeat: reset stall clock whenever audio actively plays ────────────
-let _lastSpeechTick = 0;
-function _bgKick() { _lastSpeechTick = Date.now(); }
-
-// timeupdate fires from the audio element clock even with screen locked.
-// Use it to detect stalls in offline/Web Speech mode and restart.
-_player.addEventListener('timeupdate', () => {
-  if (!isPlaying || !_isOffline) return; // online mode uses _playBlob, no stall needed
-  const now = Date.now();
-  if (now - _lastSpeechTick < 4000) return;
-  _lastSpeechTick = now;
+// ── Offline fallback: Web Speech API ─────────────────────────────────────
+/**
+ * Web Speech API is used ONLY when the device is offline.
+ * It does NOT survive backgrounding on most Android/desktop browsers —
+ * Chrome pauses it when the tab is hidden. This is a known limitation
+ * of the browser SpeechSynthesis API with no workaround.
+ *
+ * For reliable background audio, users need to be online (free RV plan)
+ * or have AWS Polly configured (ownkey/pay plans).
+ */
+function _wss(text, onEnd, onErr) {
   const ss = window.speechSynthesis;
-  if (ss && ss.paused) { ss.resume(); return; }
-  if (ss && !ss.speaking) { ss.cancel(); _speakParaAt(curPara); }
-});
+  if (!ss) { onErr(); return; }
 
-// Warm up voices list
-if (window.speechSynthesis) {
+  ss.cancel(); // clear any pending utterances
+
+  const u    = new SpeechSynthesisUtterance(text);
+  u.rate     = Math.max(0.5, Math.min(2, CFG.freeSpeed || 0.9));
+  u.pitch    = 1;
+  u.volume   = 1;
+
+  // Prefer a local (on-device) English voice — these survive background better
+  // than cloud voices on some Android versions
+  const voices = ss.getVoices();
+  if (voices.length) {
+    u.voice = voices.find(v => v.lang.startsWith('en') && v.localService)
+           || voices.find(v => v.lang.startsWith('en'))
+           || voices[0];
+  }
+
+  u.onend   = () => { _lastPlayTime = Date.now(); onEnd(); };
+  u.onerror = e  => {
+    // 'interrupted' and 'canceled' are not real errors — they happen on pause/stop
+    if (e.error !== 'interrupted' && e.error !== 'canceled') {
+      console.warn('[WSS] Error:', e.error);
+      onErr();
+    }
+  };
+
+  // One-tick defer: required on some iOS/Android to avoid races with ss.cancel()
+  setTimeout(() => { if (isPlaying) ss.speak(u); }, 0);
+}
+
+// Pre-warm voice list — some browsers populate it lazily
+if ('speechSynthesis' in window) {
   window.speechSynthesis.getVoices();
   window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
 
-// ── Para-level playback ────────────────────────────────────────────────────
+// ── Stall / watchdog ──────────────────────────────────────────────────────
+/**
+ * Watches for audio that has stalled (no timeupdate events for STALL_TIMEOUT ms).
+ * This catches:
+ *   - Network timeouts mid-sentence
+ *   - Android audio focus steals (e.g. notification sound)
+ *   - AudioContext suspension after backgrounding
+ *   - Blob URL that loaded but play() silently failed
+ *
+ * Recovery: cancel current fetch, resume AudioContext, restart the paragraph.
+ */
+function _resetStallTimer() {
+  clearTimeout(_stalledTimer);
+  if (!isPlaying) return;
+
+  _stalledTimer = setTimeout(() => {
+    if (!isPlaying) return;
+    const gap = Date.now() - _lastPlayTime;
+    if (gap < STALL_TIMEOUT) {
+      // Audio has been playing recently — reset the timer
+      _resetStallTimer();
+      return;
+    }
+    console.warn(`[Stall] No audio for ${gap}ms, self-healing…`);
+    _resumeCtx();
+    _cancelPrefetch();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    _speakParaAt(curPara); // restart current paragraph
+  }, STALL_TIMEOUT);
+}
+
+// ── Para-level playback ───────────────────────────────────────────────────
 function _speakParaAt(idx) {
-  if (!isPlaying||idx>=allParas.length){ stopSpeech(); return; }
-  if (allParas[idx].heading){ curPara=idx+1; _speakParaAt(idx+1); return; }
-  const ch=chapters[curCh];
-  if (idx>=ch.end&&curCh<chapters.length-1){ curCh++; loadChapter(curCh); curPara=chapters[curCh].start; _speakParaAt(curPara); return; }
-  _paraIdx=idx; _sentences=toSentences(allParas[idx].text); _sIdx=0;
-  highlight(idx); scrollTo(idx); updateProgress(); saveCurrentPos();
-  updateMediaSession();
+  if (!isPlaying || idx >= allParas.length) { stopSpeech(); return; }
+
+  // Skip heading paragraphs (they are chapter titles, not spoken)
+  if (allParas[idx].heading) {
+    curPara = idx + 1;
+    _speakParaAt(idx + 1);
+    return;
+  }
+
+  // Advance to next chapter if we've passed the end of this one
+  const ch = chapters[curCh];
+  if (idx >= ch.end && curCh < chapters.length - 1) {
+    curCh++;
+    loadChapter(curCh);
+    curPara = chapters[curCh].start;
+    _speakParaAt(curPara);
+    return;
+  }
+
+  _paraIdx   = idx;
+  _sentences = toSentences(allParas[idx].text);
+  _sIdx      = 0;
+
+  highlight(idx);
+  scrollTo(idx);
+  updateProgress();
+  saveCurrentPos();
+  updateMediaSession('playing');
+
+  // Kick off prefetch for sentence[1] while sentence[0] is being fetched
+  if (!_isOffline && _sentences.length > 1) {
+    _prefetch(_sentences[1]);
+  }
+
   speakSentence();
 }
 
-// ── Play / Pause / Stop ────────────────────────────────────────────────────
+// ── Play / Pause / Stop ───────────────────────────────────────────────────
 function startReading() {
   if (isPlaying || !allParas.length) return;
-  _initAudioSession();   // claim audio focus with our tone loop
+
+  _initAudioSession();   // sets up AudioContext + oscillator + Media Session
   isPlaying = true;
   updatePlayIcon(true);
   setStat('');
   updateMediaSession('playing');
+  _lastPlayTime = Date.now();
+
   _speakParaAt(curPara);
 }
 
 function pauseReading() {
   isPlaying = false;
   updatePlayIcon(false);
-  cancelTTS();
-  // Keep _player looping — releasing it drops the audio session and removes
-  // the lock-screen notification
+  clearTimeout(_stalledTimer);
+  _cancelPrefetch();
+
+  if (_player && !_player.paused) {
+    _player.onended = null;
+    _player.onerror = null;
+    _player.pause();
+  }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+  // Keep Media Session registered — lock screen controls stay visible while paused
   updateMediaSession('paused');
 }
 
 function stopSpeech() {
   isPlaying = false;
   updatePlayIcon(false);
-  cancelTTS();
-  if (_player) _player.pause();
-  _sessionReady = false;
+  clearTimeout(_stalledTimer);
+  _cancelPrefetch();
+
+  if (_player) {
+    _player.onended = null;
+    _player.onerror = null;
+    _player.pause();
+    _player.removeAttribute('src');
+    _player.load(); // force the element to release the blob URL
+  }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+  // Keep AudioContext alive (don't close it) — restarting is expensive and
+  // requires another user gesture on some browsers.
+  // _sessionReady stays true so the oscillator keeps running.
+
   updateMediaSession('none');
 }
 
-function togglePlay() { if (!allParas.length) return; isPlaying ? pauseReading() : startReading(); }
+function togglePlay() {
+  if (!allParas.length) return;
+  isPlaying ? pauseReading() : startReading();
+}
 
 function updatePlayIcon(playing) {
-  const ip = document.getElementById('ico-play'), ipa = document.getElementById('ico-pause');
+  const ip  = document.getElementById('ico-play');
+  const ipa = document.getElementById('ico-pause');
   if (ip)  ip.style.display  = playing ? 'none'  : 'block';
   if (ipa) ipa.style.display = playing ? 'block' : 'none';
 }
 
-// ── visibilitychange ─────────────────────────────────────────────────────
-// Online mode: _playBlob chains automatically — no intervention needed.
-// Offline mode: Web Speech may die — detect and restart via timeupdate.
-let _bgTimer = null;
-document.addEventListener('visibilitychange', () => {
-  _resumeAudioSession();
-  if (document.visibilityState === 'visible' && isPlaying && _isOffline) {
-    // Web Speech may have died while hidden — give it 600ms then check
-    clearTimeout(_bgTimer);
-    _bgTimer = setTimeout(() => {
-      if (!isPlaying) return;
-      const ss = window.speechSynthesis;
-      if (ss && !ss.speaking && !ss.paused) {
-        ss.cancel(); _speakParaAt(curPara);
-      }
-    }, 600);
-  }
-});
-
+// ── cancelTTS ─────────────────────────────────────────────────────────────
 function cancelTTS() {
-  // Stop the player mid-sentence (clears onended so it doesn't chain)
+  _cancelPrefetch();
   if (_player && !_player.paused) {
     _player.onended = null;
     _player.onerror = null;
     _player.pause();
-    // Don't clear src — we'll set it on next sentence
   }
-  // Also cancel Web Speech (offline mode)
   if (window.speechSynthesis) window.speechSynthesis.cancel();
-  // Legacy Polly audio element (ownkey/pay)
-  if (_pollyAudio) { try { _pollyAudio.pause(); } catch(e){} _pollyAudio = null; }
 }
 
-function setStat(s) { const el = document.getElementById('pl-stat'); if (el) el.textContent = s; }
+// ── Background resilience ─────────────────────────────────────────────────
+/**
+ * visibilitychange fires when:
+ *   - User switches tabs (hidden → visible)
+ *   - Screen locks / unlocks (hidden → visible on Android)
+ *   - User minimises / restores the browser
+ *
+ * When returning to visible:
+ *   1. Resume AudioContext (Android Chrome suspends it while hidden)
+ *   2. If we were playing and the player is now paused, restart the paragraph
+ *      (the OS may have killed the audio pipeline while backgrounded)
+ *
+ * 500 ms debounce gives the browser time to fully restore audio routing
+ * before we attempt to play — without it, play() sometimes silently fails
+ * on the first attempt after coming back from background.
+ */
+let _visibilityDebounce = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    clearTimeout(_visibilityDebounce);
+    _visibilityDebounce = setTimeout(() => {
+      _resumeCtx();
+      if (isPlaying) {
+        const silentFor = Date.now() - _lastPlayTime;
+        if (silentFor > 1500 && _player.paused) {
+          console.log('[BG] Returned from background, restarting para after', silentFor, 'ms gap');
+          _cancelPrefetch();
+          if (window.speechSynthesis) window.speechSynthesis.cancel();
+          _speakParaAt(curPara);
+        }
+      }
+    }, 500);
+  }
+  // When going to background: AudioContext will be suspended by the OS,
+  // but the keep-alive oscillator ensures the OS knows we want audio focus.
+  // Nothing to do here — the oscillator handles it.
+});
+
+/**
+ * pageshow fires on back-forward cache restore (bfcache) on iOS Safari.
+ * bfcache freezes JS execution — when restored, AudioContext is suspended.
+ * Resume it here so audio continues after the user navigates back.
+ */
+window.addEventListener('pageshow', e => {
+  if (e.persisted) {
+    // Page was restored from bfcache
+    _resumeCtx();
+    if (isPlaying && _player.paused) {
+      setTimeout(() => {
+        if (isPlaying && _player.paused) _speakParaAt(curPara);
+      }, 300);
+    }
+  }
+});
+
+/**
+ * timeupdate fires from the <audio> element at ~4 Hz during playback.
+ * It fires even with the screen locked on Android Chrome (as long as
+ * audio is actually playing). We use it to advance _lastPlayTime so
+ * the stall watchdog doesn't falsely trigger during long sentences.
+ */
+_player.addEventListener('timeupdate', () => {
+  _lastPlayTime = Date.now();
+});
+
+/**
+ * 'play' event fires when playback actually starts (after any buffering).
+ * Useful for resetting stall timer on the very first frame of audio.
+ */
+_player.addEventListener('play', () => {
+  _lastPlayTime = Date.now();
+  _resetStallTimer();
+  _resumeCtx(); // ensure AudioContext is running
+});
+
+/**
+ * 'pause' fired by the browser (not by us) — e.g. OS phone call interruption.
+ * If we think we're playing but the element is paused, restart.
+ */
+_player.addEventListener('pause', () => {
+  if (isPlaying && _player.paused) {
+    // Brief delay: distinguish OS interruption from our own pause() call
+    setTimeout(() => {
+      if (isPlaying && _player.paused) {
+        console.log('[Player] Unexpectedly paused by OS — restarting');
+        _resumeCtx();
+        _speakParaAt(curPara);
+      }
+    }, 800);
+  }
+});
+
+function setStat(s) {
+  const el = document.getElementById('pl-stat');
+  if (el) el.textContent = s;
+}
 
 /* ═══ CONTROLS ════════════════════════════════════════════════════════════ */
 document.getElementById('play-btn').onclick=togglePlay;
@@ -2718,7 +3458,9 @@ function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/
 /* ═══ DELETE ══════════════════════════════════════════════════════════════ */
 function askDelete(name){
   bookToDelete=name;
-  document.getElementById('del-name').textContent=name;
+  // ✅ PATCHED: Use textContent — never innerHTML — for user-supplied values
+  const el = document.getElementById('del-name');
+  if (el) el.textContent = name;
   document.getElementById('del-confirm').classList.add('show');
 }
 function closeDel(){ document.getElementById('del-confirm').classList.remove('show'); bookToDelete=null; }
@@ -2757,3 +3499,4 @@ document.addEventListener('keydown', e=>{
 })();
 </script>
 </body>
+</html>
