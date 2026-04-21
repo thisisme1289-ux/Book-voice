@@ -16,9 +16,9 @@
   3. unpkg.com missing from connect-src → Tesseract .map fetch blocked.
   4. frame-src missing → Razorpay 3DS iframe blocked.
   5. lumberjack.razorpay.com missing from connect-src → Razorpay analytics blocked.
-  6. cdn.jsdelivr.net missing from script-src-elem → Tesseract worker importScripts
-     blocked. NOTE: worker-src controls worker *instantiation*; script-src-elem
-     controls scripts loaded INSIDE a worker via importScripts(). Both are needed.
+  6. Tesseract worker importScripts fix: we now pass workerPath='https://unpkg.com/...'
+     explicitly in getTesseractWorker() so it NEVER loads from jsdelivr.net.
+     This is the correct fix — fighting the CSP was a symptom, not the cause.
   7. sdk.amazonaws.com removed from SW precache (no CORS headers → cache.add fails).
   8. worker-src includes 'self' for sw.js same-origin registration.
 -->
@@ -27,7 +27,6 @@
   script-src 'self' 'unsafe-inline'
     https://cdnjs.cloudflare.com
     https://unpkg.com
-    https://cdn.jsdelivr.net
     https://code.responsivevoice.org
     https://sdk.amazonaws.com
     https://checkout.razorpay.com
@@ -35,7 +34,6 @@
   script-src-elem 'self' 'unsafe-inline'
     https://cdnjs.cloudflare.com
     https://unpkg.com
-    https://cdn.jsdelivr.net
     https://code.responsivevoice.org
     https://sdk.amazonaws.com
     https://checkout.razorpay.com
@@ -62,7 +60,6 @@
     https://api.razorpay.com
     https://checkout.razorpay.com;
   worker-src 'self' blob:
-    https://cdn.jsdelivr.net
     https://unpkg.com
     https://cdnjs.cloudflare.com;
 ">
@@ -1449,31 +1446,31 @@ let bookToDelete = null;
       const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
       console.log('[SW] Registered, scope:', reg.scope);
 
-      // When a new version of sw.js is found, activate it immediately
-      // (without waiting for all tabs to close) then reload to pick up changes.
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        if (!newSW) return;
-        newSW.addEventListener('statechange', () => {
-          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-            // New SW is ready and waiting — activate it now.
-            newSW.postMessage({ type: 'SKIP_WAITING' });
-            // Show a subtle toast so the user knows the app updated.
-            // (showToast is defined later but this fires async, so it's safe.)
-            setTimeout(() => {
-              if (typeof showToast === 'function') {
-                showToast('✦ App updated — refresh for the latest version.');
-              }
-            }, 500);
+      // When a new SW is waiting, activate it immediately.
+      // Then reload the page so the browser fetches fresh HTML from the new cache
+      // (this is how stale CSP / stale cached HTML gets replaced in one reload).
+      const activateNewSW = (sw) => {
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('[SW] New version installed — activating immediately');
+            sw.postMessage({ type: 'SKIP_WAITING' });
           }
         });
+      };
+
+      if (reg.installing) activateNewSW(reg.installing);
+      reg.addEventListener('updatefound', () => {
+        if (reg.installing) activateNewSW(reg.installing);
       });
 
-      // Detect when a waiting SW has taken control (after SKIP_WAITING above).
+      // When the new SW takes control, reload once to get fresh HTML with new CSP.
+      // Guard with sessionStorage so we never loop-reload.
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('[SW] Controller changed — new version active.');
-        // Don't auto-reload: the user might be mid-reading.
-        // The toast above is enough.
+        console.log('[SW] Controller changed — reloading for fresh cache');
+        if (!sessionStorage.getItem('sw-reloaded')) {
+          sessionStorage.setItem('sw-reloaded', '1');
+          location.reload();
+        }
       });
 
     } catch (err) {
@@ -1753,10 +1750,15 @@ let _tesseractWorker = null;
 async function getTesseractWorker() {
   if (_tesseractWorker) return _tesseractWorker;
 
-  // Use tessdata_best — significantly higher accuracy than standard model
-  // The _best models are larger but essential for clean book text recognition
+  // IMPORTANT: Tesseract.js v5 defaults its worker script to jsdelivr.net.
+  // We override workerPath to use unpkg.com, which is already in our CSP
+  // script-src-elem and connect-src directives. Without this explicit path,
+  // the blob worker calls importScripts('https://cdn.jsdelivr.net/...') and
+  // Chrome's CSP blocks it even if jsdelivr is listed in the page CSP —
+  // because the check happens in the worker's inherited CSP context.
   _tesseractWorker = await Tesseract.createWorker('eng', 1, {
-    langPath: 'https://tessdata.projectnaptha.com/4.0.0_best',
+    workerPath: 'https://unpkg.com/tesseract.js@5/dist/worker.min.js',
+    langPath:   'https://tessdata.projectnaptha.com/4.0.0_best',
     logger: m => {
       if (m.status === 'recognizing text') {
         const pct = Math.round((m.progress || 0) * 100);
@@ -3546,4 +3548,3 @@ document.addEventListener('keydown', e=>{
 })();
 </script>
 </body>
-</html>
