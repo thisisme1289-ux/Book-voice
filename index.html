@@ -10,22 +10,24 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Legible"/>
 <!--
-  CONTENT SECURITY POLICY — fixes applied:
-  1. Removed wildcard "polly.*.amazonaws.com" — CSP in <meta> tags does NOT support
-     subdomain wildcards in the middle of a hostname (only *.host.com at the start).
-     Each AWS Polly region endpoint is listed explicitly instead.
-  2. Added https://cdn.razorpay.com to script-src — Razorpay checkout.js dynamically
-     loads bundle.js from cdn.razorpay.com; without this it is blocked.
-  3. Added https://api.razorpay.com and https://cdn.razorpay.com to connect-src.
-  4. Added frame-src for api.razorpay.com — Razorpay opens an iframe for 3-D Secure.
-  5. Added https://unpkg.com to connect-src — Tesseract loads a .map file from unpkg.
-  6. Added script-src-elem explicitly to prevent the checkout.js fallback warning.
+  CONTENT SECURITY POLICY — all known errors fixed:
+  1. polly.*.amazonaws.com wildcard invalid in <meta> CSP → explicit regions listed.
+  2. cdn.razorpay.com missing from script-src → Razorpay bundle blocked.
+  3. unpkg.com missing from connect-src → Tesseract .map fetch blocked.
+  4. frame-src missing → Razorpay 3DS iframe blocked.
+  5. lumberjack.razorpay.com missing from connect-src → Razorpay analytics blocked.
+  6. cdn.jsdelivr.net missing from script-src-elem → Tesseract worker importScripts
+     blocked. NOTE: worker-src controls worker *instantiation*; script-src-elem
+     controls scripts loaded INSIDE a worker via importScripts(). Both are needed.
+  7. sdk.amazonaws.com removed from SW precache (no CORS headers → cache.add fails).
+  8. worker-src includes 'self' for sw.js same-origin registration.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self' blob: data:;
   script-src 'self' 'unsafe-inline'
     https://cdnjs.cloudflare.com
     https://unpkg.com
+    https://cdn.jsdelivr.net
     https://code.responsivevoice.org
     https://sdk.amazonaws.com
     https://checkout.razorpay.com
@@ -33,6 +35,7 @@
   script-src-elem 'self' 'unsafe-inline'
     https://cdnjs.cloudflare.com
     https://unpkg.com
+    https://cdn.jsdelivr.net
     https://code.responsivevoice.org
     https://sdk.amazonaws.com
     https://checkout.razorpay.com
@@ -45,8 +48,10 @@
     https://code.responsivevoice.org
     https://tessdata.projectnaptha.com
     https://unpkg.com
+    https://cdn.jsdelivr.net
     https://api.razorpay.com
     https://cdn.razorpay.com
+    https://lumberjack.razorpay.com
     https://polly.ap-south-1.amazonaws.com
     https://polly.us-east-1.amazonaws.com
     https://polly.us-west-2.amazonaws.com
@@ -62,6 +67,9 @@
     https://cdnjs.cloudflare.com;
 ">
 <title>Legible — PDF Reader</title>
+<!-- Permissions-Policy: declare web-share as allowed so Razorpay's use of it
+     doesn't log "Unrecognized feature" warnings in the console. -->
+<meta http-equiv="Permissions-Policy" content="web-share=*"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE"></script>
