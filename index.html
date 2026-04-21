@@ -2690,7 +2690,6 @@ document.getElementById('settings-modal').addEventListener('click', e => {
 // ── Core audio state ──────────────────────────────────────────────────────
 const _player        = document.getElementById('player');
 let   _audioCtx      = null;
-let   _mediaGain     = null;   // GainNode connecting _player → AudioContext
 let   _keepAliveOsc  = null;   // inaudible oscillator for OS audio focus
 let   _sessionReady  = false;  // AudioContext + oscillator initialised
 let   _msReady       = false;  // Media Session handlers registered
@@ -2724,44 +2723,29 @@ function _initAudioSession() {
   _sessionReady = true;
 
   try {
-    // Create the AudioContext in 'playback' latency mode.
-    // This hint tells the OS this is a music/audio app, not a voice call,
-    // and grants it lower-latency background scheduling on Android.
+    // AudioContext purely for the keep-alive oscillator and OS audio focus.
+    // We do NOT route the <audio> element through the AudioContext graph —
+    // createMediaElementSource would detach the element from the speakers
+    // whenever the AudioContext is suspended, causing silence. The <audio>
+    // element plays directly to the system audio output on its own.
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)({
       latencyHint: 'playback',
-      sampleRate: 44100,
+      sampleRate:  44100,
     });
 
-    // Connect the <audio> element into the AudioContext graph.
-    // This is required for the keep-alive oscillator to work alongside the
-    // audio element — both must share the same AudioContext destination.
-    try {
-      const src = _audioCtx.createMediaElementSource(_player);
-      _mediaGain = _audioCtx.createGain();
-      _mediaGain.gain.value = 1.0;
-      src.connect(_mediaGain);
-      _mediaGain.connect(_audioCtx.destination);
-    } catch (e) {
-      // createMediaElementSource throws if the element is already connected
-      // (e.g. on hot-reload in dev). Safe to ignore — audio still works.
-      console.warn('[Audio] MediaElementSource:', e.message);
-    }
-
-    // Keep-alive oscillator: 20 Hz sine, gain ≈ 0.
-    // The OS audio scheduler considers the AudioContext "active" as long as
-    // an oscillator is running, even at inaudible gain. This prevents Android
-    // Chrome from suspending the audio pipeline after 30 s in background.
+    // Keep-alive oscillator: 20 Hz sine at inaudible gain.
+    // Keeps the AudioContext "active" so the OS knows this page has audio
+    // output and grants background audio focus on Android Chrome.
     _keepAliveOsc = _audioCtx.createOscillator();
     const kaGain  = _audioCtx.createGain();
-    kaGain.gain.setValueAtTime(0.00001, _audioCtx.currentTime); // truly silent
+    kaGain.gain.setValueAtTime(0.00001, _audioCtx.currentTime);
     _keepAliveOsc.type            = 'sine';
-    _keepAliveOsc.frequency.value = 20; // below human hearing threshold
+    _keepAliveOsc.frequency.value = 20;
     _keepAliveOsc.connect(kaGain);
     kaGain.connect(_audioCtx.destination);
     _keepAliveOsc.start();
 
     _audioCtx.resume().catch(() => {});
-
     console.log('[Audio] AudioContext ready, state:', _audioCtx.state);
   } catch (e) {
     console.warn('[Audio] AudioContext unavailable:', e.message);
@@ -3013,28 +2997,13 @@ async function _fetchAudio(text, signal) {
 }
 
 // ── Audio playback ────────────────────────────────────────────────────────
-/**
- * _playBlob — loads a blob into the <audio> element and plays it.
- *
- * The blob URL is created just before play() and revoked in the cleanup
- * handler so it is never leaked even if the element is stopped mid-stream.
- *
- * We do NOT revoke immediately on play() — Chrome on Android needs the
- * URL to remain valid for the duration of playback for background audio
- * to work correctly with the AudioContext graph.
- */
 function _playBlob(blob, onEnd, onErr) {
   if (!isPlaying) return;
 
   const url = URL.createObjectURL(blob);
-  let   revoked = false;
-
-  const revoke = () => {
-    if (!revoked) { revoked = true; URL.revokeObjectURL(url); }
-  };
 
   const cleanup = () => {
-    revoke();
+    URL.revokeObjectURL(url);
     _player.onended = null;
     _player.onerror = null;
     _lastPlayTime   = Date.now();
@@ -3042,17 +3011,16 @@ function _playBlob(blob, onEnd, onErr) {
 
   _player.onended = () => { cleanup(); onEnd(); };
   _player.onerror = (e) => {
-    console.warn('[Player] onerror', e?.target?.error?.message);
+    const msg = e?.target?.error?.message || 'unknown';
+    console.warn('[Player] onerror:', msg);
     cleanup();
     onErr();
   };
 
-  // Set src and playback parameters
   _player.src    = url;
   _player.volume = 1.0;
   _player.loop   = false;
 
-  // Ensure AudioContext is running before we call play()
   _resumeCtx();
 
   _player.play()
@@ -3061,8 +3029,6 @@ function _playBlob(blob, onEnd, onErr) {
       _resetStallTimer();
     })
     .catch(err => {
-      // NotAllowedError = autoplay blocked (user hasn't gestured yet)
-      // NotSupportedError = codec not supported
       console.warn('[Player] play() rejected:', err.name, err.message);
       cleanup();
       onErr();
@@ -3434,23 +3400,6 @@ _player.addEventListener('play', () => {
   _resumeCtx(); // ensure AudioContext is running
 });
 
-/**
- * 'pause' fired by the browser (not by us) — e.g. OS phone call interruption.
- * If we think we're playing but the element is paused, restart.
- */
-_player.addEventListener('pause', () => {
-  if (isPlaying && _player.paused) {
-    // Brief delay: distinguish OS interruption from our own pause() call
-    setTimeout(() => {
-      if (isPlaying && _player.paused) {
-        console.log('[Player] Unexpectedly paused by OS — restarting');
-        _resumeCtx();
-        _speakParaAt(curPara);
-      }
-    }, 800);
-  }
-});
-
 function setStat(s) {
   const el = document.getElementById('pl-stat');
   if (el) el.textContent = s;
@@ -3479,8 +3428,12 @@ document.getElementById('scrub-wrap').addEventListener('click',e=>{
   const pct=e.offsetX/e.currentTarget.offsetWidth;
   jumpTo(Math.floor(pct*allParas.length));
 });
-document.getElementById('speed-sl').oninput=function(){
-  document.getElementById('spd-val').textContent=parseFloat(this.value).toFixed(1)+'×';
+document.getElementById('speed-sl').oninput = function() {
+  CFG.freeSpeed = parseFloat(this.value);
+  document.getElementById('spd-val').textContent = CFG.freeSpeed.toFixed(1) + '×';
+};
+document.getElementById('voice-sel').onchange = function() {
+  CFG.freeVoice = this.value;
 };
 
 /* ═══ HELPERS ═════════════════════════════════════════════════════════════ */
@@ -3536,12 +3489,24 @@ document.addEventListener('keydown', e=>{
     await DB.init();
     USER_ID = await getUserId();
     await loadSettings();
+
+    // Sync player-bar controls from loaded CFG
+    const voiceSel = document.getElementById('voice-sel');
+    const speedSl  = document.getElementById('speed-sl');
+    const spdVal   = document.getElementById('spd-val');
+    if (voiceSel) voiceSel.value = CFG.freeVoice;
+    if (speedSl)  speedSl.value  = CFG.freeSpeed;
+    if (spdVal)   spdVal.textContent = Number(CFG.freeSpeed).toFixed(1) + '×';
+
+    // Wire test-voice button in player bar
+    const testBtn = document.getElementById('test-voice-btn');
+    if (testBtn) testBtn.addEventListener('click', testFreeVoice);
+
     bindFileInputs();
     showLibrary();
     if (CFG.plan !== 'free') fetchCredits();
   } catch(e) {
     console.error('Init failed:', e);
-    // Even if init fails, try to show the library so user can at least see the UI
     document.getElementById('library-screen').classList.remove('hidden');
     bindFileInputs();
   }
