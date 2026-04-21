@@ -22,8 +22,8 @@
  * never kills the tab due to a failed navigation.
  */
 
-const SHELL_VER   = 'legible-shell-v4';
-const RUNTIME_VER = 'legible-runtime-v4';
+const SHELL_VER   = 'legible-shell-v5';
+const RUNTIME_VER = 'legible-runtime-v5';
 const MAX_RUNTIME = 120;
 
 const SHELL_URLS = [
@@ -31,7 +31,10 @@ const SHELL_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
   'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js',
-  'https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js',
+  // NOTE: sdk.amazonaws.com is intentionally excluded — AWS SDK CDN does not
+  // send CORS headers, so cache.add() fails with a CORS error. The script is
+  // still loaded normally via the <script> tag in the HTML; it just won't be
+  // precached for offline. All other assets cover the critical app shell.
   'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap',
 ];
 
