@@ -1,5 +1,5 @@
 /**
- * Legible — Service Worker v4
+ * Legible — Service Worker v6
  *
  * WHAT THIS SW DOES
  * -----------------
@@ -22,8 +22,8 @@
  * never kills the tab due to a failed navigation.
  */
 
-const SHELL_VER   = 'legible-shell-v5';
-const RUNTIME_VER = 'legible-runtime-v5';
+const SHELL_VER   = 'legible-shell-v6';
+const RUNTIME_VER = 'legible-runtime-v6';
 const MAX_RUNTIME = 120;
 
 const SHELL_URLS = [
