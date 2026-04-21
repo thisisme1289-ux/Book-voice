@@ -4,10 +4,23 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#0c0b09"/>
+<!-- apple-mobile-web-app-capable replaced by mobile-web-app-capable (non-deprecated) -->
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Legible"/>
-<!-- ✅ SECURITY: Content Security Policy — restricts script/style/connect sources -->
+<!--
+  CONTENT SECURITY POLICY — fixes applied:
+  1. Removed wildcard "polly.*.amazonaws.com" — CSP in <meta> tags does NOT support
+     subdomain wildcards in the middle of a hostname (only *.host.com at the start).
+     Each AWS Polly region endpoint is listed explicitly instead.
+  2. Added https://cdn.razorpay.com to script-src — Razorpay checkout.js dynamically
+     loads bundle.js from cdn.razorpay.com; without this it is blocked.
+  3. Added https://api.razorpay.com and https://cdn.razorpay.com to connect-src.
+  4. Added frame-src for api.razorpay.com — Razorpay opens an iframe for 3-D Secure.
+  5. Added https://unpkg.com to connect-src — Tesseract loads a .map file from unpkg.
+  6. Added script-src-elem explicitly to prevent the checkout.js fallback warning.
+-->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self' blob: data:;
   script-src 'self' 'unsafe-inline'
@@ -15,17 +28,38 @@
     https://unpkg.com
     https://code.responsivevoice.org
     https://sdk.amazonaws.com
-    https://checkout.razorpay.com;
+    https://checkout.razorpay.com
+    https://cdn.razorpay.com;
+  script-src-elem 'self' 'unsafe-inline'
+    https://cdnjs.cloudflare.com
+    https://unpkg.com
+    https://code.responsivevoice.org
+    https://sdk.amazonaws.com
+    https://checkout.razorpay.com
+    https://cdn.razorpay.com;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src https://fonts.gstatic.com;
-  img-src 'self' blob: data:;
+  img-src 'self' blob: data: https:;
   media-src 'self' blob:;
   connect-src 'self' blob:
     https://code.responsivevoice.org
     https://tessdata.projectnaptha.com
-    https://polly.*.amazonaws.com
-    https://api.razorpay.com;
-  worker-src blob:;
+    https://unpkg.com
+    https://api.razorpay.com
+    https://cdn.razorpay.com
+    https://polly.ap-south-1.amazonaws.com
+    https://polly.us-east-1.amazonaws.com
+    https://polly.us-west-2.amazonaws.com
+    https://polly.eu-west-1.amazonaws.com
+    https://polly.eu-central-1.amazonaws.com
+    https://polly.ap-southeast-1.amazonaws.com;
+  frame-src
+    https://api.razorpay.com
+    https://checkout.razorpay.com;
+  worker-src 'self' blob:
+    https://cdn.jsdelivr.net
+    https://unpkg.com
+    https://cdnjs.cloudflare.com;
 ">
 <title>Legible — PDF Reader</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -1339,8 +1373,15 @@ let bookToDelete = null;
   }
 
   // ── 2. Inject Web App Manifest dynamically ───────────────────────────────
-  // Using a blob URL means we can ship a single HTML file with no
-  // separate manifest.json asset, while still satisfying PWA installability.
+  // Using a blob URL means we can ship a single HTML file with no separate
+  // manifest.json asset while still satisfying PWA installability.
+  //
+  // IMPORTANT: When the manifest is served as a blob: URL, relative paths like
+  // "./" resolve against the blob: origin, which is invalid. We must use the
+  // page's actual absolute URL for start_url, scope, and shortcut urls.
+  // Using location.href strips any query/hash to get just the page URL.
+  const pageURL = location.href.split('?')[0].split('#')[0];
+
   const icon192 = makeIcon(192);
   const icon512 = makeIcon(512);
 
@@ -1350,8 +1391,8 @@ let bookToDelete = null;
     description:      'PDF reader with text-to-speech — reads any book aloud.',
     display:          'standalone',
     orientation:      'portrait-primary',
-    start_url:        './',
-    scope:            './',
+    start_url:        pageURL,
+    scope:            pageURL,
     background_color: '#0c0b09',
     theme_color:      '#0c0b09',
     categories:       ['books', 'education', 'productivity'],
@@ -1359,14 +1400,12 @@ let bookToDelete = null;
       { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
       { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
-    // Shortcuts let users jump straight into reading from the home-screen
-    // long-press menu on Android.
     shortcuts: [
       {
         name:       'Open Library',
         short_name: 'Library',
-        url:        './',
-        icons:      [{ src: icon192, sizes: '192x192' }],
+        url:        pageURL,
+        icons:      [{ src: icon192, sizes: '192x192', type: 'image/png' }],
       },
     ],
   };
